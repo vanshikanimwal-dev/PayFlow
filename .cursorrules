@@ -1,0 +1,15 @@
+You are helping build PayFlow, a payments/wallet simulation. Follow docs/SPEC.md strictly.
+
+Rules:
+- Java 21, Spring Boot 3, Maven. Layering: controller -> service -> repository. DTOs at API boundary; never expose entities.
+- Money is long paise via the Money value object. Never use double/float for money.
+- Schema changes only via new Flyway migrations. Hibernate ddl-auto=validate.
+- ledger_entries is append-only. Every transaction's signed entries sum to zero.
+- When locking multiple accounts, lock in ascending UUID order.
+- Never call external services (gateway) inside a DB transaction holding locks.
+- All money-moving endpoints require Idempotency-Key.
+- Write tests with every feature. Integration tests use Testcontainers PostgreSQL (not H2).
+- Prefer small, focused classes. Constructor injection. No field @Autowired.
+- Do not add dependencies or change the architecture without saying why.
+- When unsure about a requirement, quote the relevant SPEC section and ask before guessing.
+- After each change, list what tests cover it and what remains untested.
