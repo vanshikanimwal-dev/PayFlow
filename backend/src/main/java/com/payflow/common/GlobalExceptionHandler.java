@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.retry.ExhaustedRetryException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -140,6 +141,31 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             message = "Request validation failed";
         }
         return error(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, message);
+    }
+
+    @ExceptionHandler(ExhaustedRetryException.class)
+    ResponseEntity<Object> handleExhaustedRetry(ExhaustedRetryException ex) {
+        Throwable cause = ex.getCause();
+        while (cause != null) {
+            if (cause instanceof PayflowException payflow) {
+                return handlePayflow(payflow);
+            }
+            if (cause instanceof DataIntegrityViolationException integrity) {
+                return handleIntegrity(integrity);
+            }
+            if (cause instanceof IllegalStateTransitionException transition) {
+                return handleIllegalTransition(transition);
+            }
+            if (cause instanceof PessimisticLockingFailureException || cause instanceof OptimisticLockingFailureException) {
+                return handleLock((Exception) cause);
+            }
+            if (cause instanceof LockRetry.TransientLockException transientLock) {
+                return handleTransientLock(transientLock);
+            }
+            cause = cause.getCause();
+        }
+        log.error("Retry exhausted", ex);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR, "An unexpected error occurred");
     }
 
     @ExceptionHandler(Exception.class)

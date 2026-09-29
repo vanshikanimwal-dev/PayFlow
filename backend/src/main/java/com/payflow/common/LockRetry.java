@@ -16,6 +16,7 @@ public class LockRetry {
 
     @Retryable(
             retryFor = {PessimisticLockingFailureException.class, TransientLockException.class},
+            noRetryFor = PayflowException.class,
             maxAttempts = 4,
             backoff = @Backoff(delay = 10, multiplier = 2))
     public <T> T run(Supplier<T> work) {
