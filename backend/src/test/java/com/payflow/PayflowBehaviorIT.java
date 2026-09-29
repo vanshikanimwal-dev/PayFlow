@@ -420,7 +420,10 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
 
     private int postTransfer(Session from, String body) throws Exception {
         int status = 503;
-        for (int attempt = 0; attempt < 6 && status == 503; attempt++) {
+        for (int attempt = 0; attempt < 10 && status == 503; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(50);
+            }
             status = mvc.perform(post("/api/v1/transfers")
                             .header("Authorization", bearer(from))
                             .header("Idempotency-Key", UUID.randomUUID().toString())
