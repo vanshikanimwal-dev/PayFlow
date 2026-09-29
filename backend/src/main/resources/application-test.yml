@@ -1,6 +1,24 @@
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   jpa:
     hibernate:
       ddl-auto: validate
   flyway:
     enabled: true
+
+payflow:
+  jobs:
+    enabled: false
+  jwt:
+    secret: test-jwt-secret-must-be-32-characters-min
+  gateway:
+    base-url: http://127.0.0.1:9
+    callback-url: http://127.0.0.1:9/api/v1/webhooks/gateway
+    hmac-secret: test-gateway-hmac-secret
+  rate-limit:
+    login-per-minute: 100000
+    money-per-minute: 100000
+  outbox:
+    broker: in-process

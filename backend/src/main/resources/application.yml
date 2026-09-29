@@ -22,6 +22,15 @@ spring:
   web:
     resources:
       add-mappings: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 
 server:
   port: 8080
@@ -42,8 +51,81 @@ management:
       probes:
         enabled: true
       show-details: never
+  health:
+    rabbit:
+      enabled: false
 
 logging:
   structured:
     format:
       console: ecs
+
+payflow:
+  jwt:
+    secret: ${PAYFLOW_JWT_SECRET:dev-only-secret-change-me-please-32b}
+    access-ttl: 15m
+    refresh-ttl: 7d
+  gateway:
+    base-url: ${PAYFLOW_GATEWAY_URL:http://localhost:8081}
+    callback-url: ${PAYFLOW_CALLBACK_URL:http://localhost:8080/api/v1/webhooks/gateway}
+    hmac-secret: ${PAYFLOW_GATEWAY_HMAC_SECRET:dev-gateway-hmac-secret}
+    connect-timeout: 3s
+    read-timeout: 3s
+  locking:
+    strategy: pessimistic
+    lock-timeout: 3s
+  limits:
+    max-transfer-minor: 5000000
+    daily-transfer-minor: 10000000
+  fees:
+    payment-percent: 2
+  payments:
+    request-ttl: 15m
+  idempotency:
+    ttl: 24h
+    in-progress-recover-after: 2m
+  saga:
+    stale-after: 60s
+    give-up-after: 24h
+  rate-limit:
+    login-per-minute: 10
+    money-per-minute: 30
+  outbox:
+    broker: in-process
+  jobs:
+    enabled: true
+  cors:
+    allowed-origin-patterns:
+      - http://localhost:*
+      - http://127.0.0.1:*
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      gateway:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - com.payflow.gatewayclient.GatewayRejectedException
+        record-exceptions:
+          - com.payflow.gatewayclient.GatewayUnknownException
+  retry:
+    instances:
+      gateway:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.payflow.gatewayclient.GatewayUnknownException
+        ignore-exceptions:
+          - com.payflow.gatewayclient.GatewayRejectedException
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

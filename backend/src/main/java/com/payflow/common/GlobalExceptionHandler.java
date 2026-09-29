@@ -1,8 +1,13 @@
 package com.payflow.common;
 
+import com.payflow.transaction.IllegalStateTransitionException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.stream.Collectors;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -78,7 +83,40 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex.status().is5xxServerError()) {
             log.error("Payflow error {}", ex.code(), ex);
         }
-        return error(ex.status(), ex.code(), ex.getMessage());
+        ResponseEntity<Object> response = error(ex.status(), ex.code(), ex.getMessage());
+        if (ex instanceof RateLimitedException limited) {
+            return ResponseEntity.status(ex.status())
+                    .header(HttpHeaders.RETRY_AFTER, Long.toString(limited.retryAfterSeconds()))
+                    .body(response.getBody());
+        }
+        return response;
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    ResponseEntity<Object> handleMissingHeader(MissingRequestHeaderException ex) {
+        return error(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, ex.getHeaderName() + " is required");
+    }
+
+    @ExceptionHandler(IllegalStateTransitionException.class)
+    ResponseEntity<Object> handleIllegalTransition(IllegalStateTransitionException ex) {
+        log.error("Illegal state transition", ex);
+        return error(HttpStatus.CONFLICT, ErrorCode.VALIDATION_ERROR, "Illegal transaction state transition");
+    }
+
+    @ExceptionHandler({CannotAcquireLockException.class, OptimisticLockingFailureException.class})
+    ResponseEntity<Object> handleLock(Exception ex) {
+        log.warn("Account lock failed", ex);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.LOCK_TIMEOUT, "Could not lock accounts; retry");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<Object> handleIntegrity(DataIntegrityViolationException ex) {
+        String message = ex.getMostSpecificCause().getMessage();
+        if (message != null && message.contains("non_negative_user")) {
+            return error(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.INSUFFICIENT_BALANCE, "Wallet balance is too low");
+        }
+        log.warn("Constraint violation", ex);
+        return error(HttpStatus.CONFLICT, ErrorCode.VALIDATION_ERROR, "Request conflicts with existing data");
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

@@ -1,0 +1,25 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: payflow-gateway
+  datasource:
+    url: jdbc:h2:mem:gateway;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+payflow:
+  gateway:
+    hmac-secret: ${PAYFLOW_GATEWAY_HMAC_SECRET:dev-gateway-hmac-secret}
+    callback-url: ${PAYFLOW_CALLBACK_URL:http://localhost:8080/api/v1/webhooks/gateway}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

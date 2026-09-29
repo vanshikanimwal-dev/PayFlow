@@ -15,6 +15,9 @@ jobs:
           java-version: "21"
           cache: maven
           cache-dependency-path: backend/pom.xml
+      - name: Gateway tests
+        working-directory: backend
+        run: ./mvnw -B -f ../gateway/pom.xml test
       - name: Unit and integration tests
         working-directory: backend
         run: ./mvnw -B verify

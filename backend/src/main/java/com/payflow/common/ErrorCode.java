@@ -17,5 +17,6 @@ public enum ErrorCode {
     RATE_LIMITED,
     GATEWAY_UNAVAILABLE,
     GATEWAY_TIMEOUT,
+    LOCK_TIMEOUT,
     INTERNAL_ERROR
 }
