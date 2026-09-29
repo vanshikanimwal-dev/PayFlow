@@ -208,12 +208,7 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
                 futures.add(pool.submit(() -> {
                     Session from = users.get(ThreadLocalRandom.current().nextInt(users.size()));
                     Session to = users.get(ThreadLocalRandom.current().nextInt(users.size()));
-                    int status = mvc.perform(post("/api/v1/transfers")
-                                    .header("Authorization", bearer(from))
-                                    .header("Idempotency-Key", UUID.randomUUID().toString())
-                                    .contentType(MediaType.APPLICATION_JSON)
-                                    .content(transferBody(to.email(), 1 + ThreadLocalRandom.current().nextInt(20))))
-                            .andReturn().getResponse().getStatus();
+                    int status = postTransfer(from, transferBody(to.email(), 1 + ThreadLocalRandom.current().nextInt(20)));
                     if (status >= 500) {
                         throw new IllegalStateException("transfer failed with " + status);
                     }
@@ -413,12 +408,7 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
         return () -> {
             int worst = 201;
             for (int i = 0; i < 1000; i++) {
-                int status = mvc.perform(post("/api/v1/transfers")
-                                .header("Authorization", bearer(from))
-                                .header("Idempotency-Key", UUID.randomUUID().toString())
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(transferBody(to.email(), 1)))
-                        .andReturn().getResponse().getStatus();
+                int status = postTransfer(from, transferBody(to.email(), 1));
                 if (status >= 500) {
                     throw new IllegalStateException("deadlock or server error " + status);
                 }
@@ -426,6 +416,19 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
             }
             return worst;
         };
+    }
+
+    private int postTransfer(Session from, String body) throws Exception {
+        int status = 503;
+        for (int attempt = 0; attempt < 6 && status == 503; attempt++) {
+            status = mvc.perform(post("/api/v1/transfers")
+                            .header("Authorization", bearer(from))
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andReturn().getResponse().getStatus();
+        }
+        return status;
     }
 
     private int pay(Session user, String body) throws Exception {

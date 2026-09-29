@@ -28,7 +28,7 @@ CHAR columns (`currency`, hashes) are mapped with `SqlTypes.CHAR` so validation 
 
 **Choice:** lock every involved account with `SELECT … WHERE id IN (…) ORDER BY id FOR UPDATE` (or the optimistic `@Version` path). Post at least two legs whose signed amounts sum to zero, then insert the transaction as `COMPLETED`. Local transfers are created in memory as `PENDING` and transition to `COMPLETED` before insert, because `PENDING → COMPLETED` is legal for `TRANSFER` and the row should not sit in `PENDING`.
 
-`payflow.locking.strategy=pessimistic` (default) sets `lock_timeout` and maps a timeout to 503. `optimistic` loads the same rows in id order and retries `OptimisticLockingFailureException` from outside the `@Transactional` method (`TransferCoordinator`, payment pay), up to 8 attempts. Retrying inside the transaction would not see a fresh version.
+`payflow.locking.strategy=pessimistic` (default) sets `lock_timeout`. A lock timeout or deadlock rolls the transaction back, and `LockRetry` runs the whole transfer again from outside that transaction, up to 4 attempts. Only the last failure becomes 503. `optimistic` loads the same rows in id order and retries `OptimisticLockingFailureException` from outside the `@Transactional` method, up to 8 attempts. Retrying inside the transaction would not see a fresh version.
 
 ## Idempotency
 
@@ -52,7 +52,7 @@ Webhook HMAC is `t=<unix>,v1=HMAC_SHA256(secret, t + "." + rawBody)`, compared i
 
 ## Merchant payments and refunds
 
-A payment request lasts 15 minutes. `POST /payments` locks the customer, merchant, and fee accounts in id order, then the request row. The fee is 2% half-up. A zero fee (tiny amounts) posts two legs. Two payers: one 201, the other 409 `ALREADY_PAID`.
+A payment request lasts 15 minutes. `POST /payments` locks the request row, then the customer, merchant, and fee accounts in id order, then claims it with `UPDATE … WHERE status = 'OPEN'`. One row changed means this payer owns it. Zero rows means 409 `ALREADY_PAID`. The fee is 2% half-up. A zero fee (tiny amounts) posts two legs.
 
 Refunds apply to `COMPLETED` `PAYMENT` or `TRANSFER` only. `TOPUP` card refunds from SPEC 8.5 are not implemented. The caller must be `ADMIN` or the owner of the destination account. The fee is proportional, and the final refund takes the remainder so fee paise do not stick. A full refund sets the original transaction to `REVERSED`.
 
@@ -64,7 +64,7 @@ The settlement CSV is fetched outside the database transaction, then `apply` cla
 
 The integrity checker compares signed entry sums, account balances, the global sum (zero), and negative balances on non-gateway accounts. Violations increment `ledger_integrity_violations_total`.
 
-Audit rows hash `prev | actor | role | action | entity | entityId | before | after | createdAt`. `audit_chain_head` is locked `FOR UPDATE` so two writers cannot share a `prev_hash`.
+Audit rows hash `prev | actor | role | action | entity | entityId | before | after | createdAt`. `before` and `after` are canonical JSON, and `createdAt` is truncated to microseconds so a Postgres round-trip still matches. `audit_chain_head` is locked `FOR UPDATE` so two writers cannot share a `prev_hash`. The transactions table has no `payment_request_id`, so the one-time claim is the `OPEN` update rather than a unique index.
 
 ## Outbox
 

@@ -4,6 +4,7 @@ import com.payflow.common.CorrelationIds;
 import com.payflow.common.Jsons;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -27,9 +28,9 @@ public class AuditService {
     @Transactional
     public void record(UUID actorId, String actorRole, String action, String entity, String entityId, Object before, Object after) {
         AuditChainHead head = heads.lockHead();
-        Instant createdAt = clock.instant();
-        String beforeJson = jsons.write(before);
-        String afterJson = jsons.write(after);
+        Instant createdAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        String beforeJson = jsonState(before);
+        String afterJson = jsonState(after);
         String prev = head.getHash();
         String hash = AuditHasher.hash(prev, actorId, actorRole, action, entity, entityId, beforeJson, afterJson, createdAt);
         AuditLog row = new AuditLog();
@@ -62,9 +63,9 @@ public class AuditService {
                     row.getAction(),
                     row.getEntity(),
                     row.getEntityId(),
-                    row.getBeforeState(),
-                    row.getAfterState(),
-                    row.getCreatedAt());
+                    jsonState(row.getBeforeState()),
+                    jsonState(row.getAfterState()),
+                    row.getCreatedAt().truncatedTo(ChronoUnit.MICROS));
             if (!expected.equals(row.getHash())) {
                 return new AuditVerifyReport(false, row.getId(), "hash does not match the row contents");
             }
@@ -81,5 +82,18 @@ public class AuditService {
     }
 
     public record AuditVerifyReport(boolean valid, Long brokenAtId, String message) {
+    }
+
+    private String jsonState(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String raw) {
+            if (raw.isBlank()) {
+                return raw;
+            }
+            return jsons.canonical(jsons.read(raw, Object.class));
+        }
+        return jsons.canonical(value);
     }
 }

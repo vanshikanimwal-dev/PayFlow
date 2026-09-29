@@ -2,6 +2,11 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      connection-timeout: 5000
+      validation-timeout: 2000
   jpa:
     hibernate:
       ddl-auto: validate

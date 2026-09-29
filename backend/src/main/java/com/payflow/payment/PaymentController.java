@@ -1,6 +1,7 @@
 package com.payflow.payment;
 
 import com.payflow.auth.CurrentUser;
+import com.payflow.common.LockRetry;
 import com.payflow.common.OptimisticRetry;
 import com.payflow.common.RateLimiter;
 import com.payflow.common.RequestHasher;
@@ -29,6 +30,7 @@ public class PaymentController {
     private final RequestHasher hasher;
     private final RateLimiter rateLimiter;
     private final OptimisticRetry optimisticRetry;
+    private final LockRetry lockRetry;
     private final PayflowProperties properties;
 
     public PaymentController(
@@ -38,6 +40,7 @@ public class PaymentController {
             RequestHasher hasher,
             RateLimiter rateLimiter,
             OptimisticRetry optimisticRetry,
+            LockRetry lockRetry,
             PayflowProperties properties) {
         this.currentUser = currentUser;
         this.payments = payments;
@@ -45,6 +48,7 @@ public class PaymentController {
         this.hasher = hasher;
         this.rateLimiter = rateLimiter;
         this.optimisticRetry = optimisticRetry;
+        this.lockRetry = lockRetry;
         this.properties = properties;
     }
 
@@ -73,7 +77,7 @@ public class PaymentController {
         if (properties.getLocking().optimistic()) {
             return optimisticRetry.run(() -> payments.pay(user.id(), idempotencyKey, hash, request));
         }
-        return payments.pay(user.id(), idempotencyKey, hash, request);
+        return lockRetry.run(() -> payments.pay(user.id(), idempotencyKey, hash, request));
     }
 
     @PostMapping("/refunds")

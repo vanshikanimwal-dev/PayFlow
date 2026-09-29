@@ -23,6 +23,7 @@ import com.payflow.transaction.TransactionStatus;
 import com.payflow.transaction.TransactionType;
 import com.payflow.transaction.WalletTransaction;
 import com.payflow.transaction.WalletTransactionRepository;
+import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,6 +49,7 @@ public class MerchantPaymentService {
     private final IdGenerator ids;
     private final Clock clock;
     private final PayflowProperties properties;
+    private final EntityManager entityManager;
 
     public MerchantPaymentService(
             PaymentRequestRepository requests,
@@ -61,7 +63,8 @@ public class MerchantPaymentService {
             OutboxWriter outbox,
             IdGenerator ids,
             Clock clock,
-            PayflowProperties properties) {
+            PayflowProperties properties,
+            EntityManager entityManager) {
         this.requests = requests;
         this.accounts = accounts;
         this.users = users;
@@ -74,6 +77,7 @@ public class MerchantPaymentService {
         this.ids = ids;
         this.clock = clock;
         this.properties = properties;
+        this.entityManager = entityManager;
     }
 
     @Transactional
@@ -119,23 +123,7 @@ public class MerchantPaymentService {
         if (begin instanceof BeginResult.Replay<PaymentDtos.PaymentResponse> replay) {
             return replay.body();
         }
-        PaymentRequest request = requests.findById(body.paymentRequestId())
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Payment request not found"));
-        Account customer = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
-        if (customer.getId().equals(request.getMerchantAccountId())) {
-            throw new PayflowException(ErrorCode.SELF_TRANSFER, HttpStatus.UNPROCESSABLE_ENTITY, "Cannot pay your own request");
-        }
-        long fee = Fees.percentHalfUp(request.getAmountMinor(), properties.getFees().getPaymentPercent());
-        long merchantAmount = request.getAmountMinor() - fee;
-        List<UUID> accountIds = new ArrayList<>();
-        accountIds.add(customer.getId());
-        accountIds.add(request.getMerchantAccountId());
-        if (fee > 0) {
-            accountIds.add(SystemAccounts.FEE);
-        }
-        List<Account> locked = locker.lock(accountIds);
-        PaymentRequest lockedRequest = requests.lockById(request.getId())
+        PaymentRequest lockedRequest = requests.lockById(body.paymentRequestId())
                 .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Payment request not found"));
         if (lockedRequest.getStatus() == PaymentRequestStatus.PAID) {
             throw new PayflowException(ErrorCode.ALREADY_PAID, HttpStatus.CONFLICT, "Payment request is already paid");
@@ -143,6 +131,31 @@ public class MerchantPaymentService {
         if (lockedRequest.getStatus() == PaymentRequestStatus.EXPIRED || lockedRequest.getExpiresAt().isBefore(clock.instant())) {
             throw new PayflowException(ErrorCode.VALIDATION_ERROR, HttpStatus.UNPROCESSABLE_ENTITY, "Payment request has expired");
         }
+        Account customer = accounts.findByOwnerId(userId)
+                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        if (customer.getId().equals(lockedRequest.getMerchantAccountId())) {
+            throw new PayflowException(ErrorCode.SELF_TRANSFER, HttpStatus.UNPROCESSABLE_ENTITY, "Cannot pay your own request");
+        }
+        long fee = Fees.percentHalfUp(lockedRequest.getAmountMinor(), properties.getFees().getPaymentPercent());
+        long merchantAmount = lockedRequest.getAmountMinor() - fee;
+        List<UUID> accountIds = new ArrayList<>();
+        accountIds.add(customer.getId());
+        accountIds.add(lockedRequest.getMerchantAccountId());
+        if (fee > 0) {
+            accountIds.add(SystemAccounts.FEE);
+        }
+        List<Account> locked = locker.lock(accountIds);
+        int claimed = entityManager.createNativeQuery("""
+                        update payment_requests
+                        set status = 'PAID'
+                        where id = :id and status = 'OPEN'
+                        """)
+                .setParameter("id", lockedRequest.getId())
+                .executeUpdate();
+        if (claimed != 1) {
+            throw new PayflowException(ErrorCode.ALREADY_PAID, HttpStatus.CONFLICT, "Payment request is already paid");
+        }
+        lockedRequest.setStatus(PaymentRequestStatus.PAID);
         Instant now = clock.instant();
         WalletTransaction tx = new WalletTransaction();
         tx.setId(ids.newId());
@@ -165,7 +178,6 @@ public class MerchantPaymentService {
             legs.add(Leg.credit(SystemAccounts.FEE, fee));
         }
         ledger.post(tx, locked, legs);
-        lockedRequest.setStatus(PaymentRequestStatus.PAID);
         Account lockedCustomer = AccountLocker.require(locked, customer.getId());
         PaymentDtos.PaymentResponse response =
                 new PaymentDtos.PaymentResponse(tx.getId(), tx.getStatus().name(), lockedCustomer.getBalanceMinor());

@@ -4,9 +4,9 @@ import com.payflow.transaction.IllegalStateTransitionException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.stream.Collectors;
-import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,8 +103,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return error(HttpStatus.CONFLICT, ErrorCode.VALIDATION_ERROR, "Illegal transaction state transition");
     }
 
-    @ExceptionHandler({CannotAcquireLockException.class, OptimisticLockingFailureException.class})
+    @ExceptionHandler({PessimisticLockingFailureException.class, OptimisticLockingFailureException.class})
     ResponseEntity<Object> handleLock(Exception ex) {
+        log.warn("Account lock failed", ex);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.LOCK_TIMEOUT, "Could not lock accounts; retry");
+    }
+
+    @ExceptionHandler(LockRetry.TransientLockException.class)
+    ResponseEntity<Object> handleTransientLock(LockRetry.TransientLockException ex) {
+        if (ex.getCause() instanceof PayflowException payflow) {
+            return handlePayflow(payflow);
+        }
         log.warn("Account lock failed", ex);
         return error(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.LOCK_TIMEOUT, "Could not lock accounts; retry");
     }
