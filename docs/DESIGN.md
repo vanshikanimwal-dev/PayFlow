@@ -64,7 +64,7 @@ The settlement CSV is fetched outside the database transaction, then `apply` cla
 
 The integrity checker compares signed entry sums, account balances, the global sum (zero), and negative balances on non-gateway accounts. Violations increment `ledger_integrity_violations_total`.
 
-Audit rows hash `prev | actor | role | action | entity | entityId | before | after | createdAt`. `before` and `after` are canonical JSON, and `createdAt` is truncated to microseconds so a Postgres round-trip still matches. `audit_chain_head` is locked `FOR UPDATE` so two writers cannot share a `prev_hash`. The transactions table has no `payment_request_id`, so the one-time claim is the `OPEN` update rather than a unique index.
+Audit rows hash `prev | actor | role | action | entity | entityId | before | after | createdAt`, with canonical JSON and `createdAt` as epoch milliseconds. Each append takes `pg_advisory_xact_lock` and then locks `audit_chain_head`, so two writers cannot share a `prev_hash`. `V4` adds nullable `transactions.payment_request_id` with a unique index so a payment request can be claimed only once.
 
 ## Outbox
 

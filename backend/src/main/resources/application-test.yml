@@ -4,8 +4,8 @@ spring:
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   datasource:
     hikari:
-      maximum-pool-size: 30
-      connection-timeout: 5000
+      maximum-pool-size: 120
+      connection-timeout: 60000
       validation-timeout: 2000
   jpa:
     hibernate:
@@ -16,6 +16,8 @@ spring:
 payflow:
   jobs:
     enabled: false
+  locking:
+    lock-timeout: 30s
   jwt:
     secret: test-jwt-secret-must-be-32-characters-min
   gateway:

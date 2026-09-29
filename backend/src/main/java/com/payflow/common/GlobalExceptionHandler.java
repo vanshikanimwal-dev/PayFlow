@@ -124,6 +124,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (message != null && message.contains("non_negative_user")) {
             return error(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.INSUFFICIENT_BALANCE, "Wallet balance is too low");
         }
+        if (message != null && message.contains("ux_tx_payment_request")) {
+            return error(HttpStatus.CONFLICT, ErrorCode.ALREADY_PAID, "Payment request is already paid");
+        }
         log.warn("Constraint violation", ex);
         return error(HttpStatus.CONFLICT, ErrorCode.VALIDATION_ERROR, "Request conflicts with existing data");
     }

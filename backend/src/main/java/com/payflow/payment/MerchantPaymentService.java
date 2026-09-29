@@ -145,6 +145,7 @@ public class MerchantPaymentService {
             accountIds.add(SystemAccounts.FEE);
         }
         List<Account> locked = locker.lock(accountIds);
+        entityManager.detach(lockedRequest);
         int claimed = entityManager.createNativeQuery("""
                         update payment_requests
                         set status = 'PAID'
@@ -166,6 +167,7 @@ public class MerchantPaymentService {
         tx.setInitiatorId(userId);
         tx.setFromAccountId(customer.getId());
         tx.setToAccountId(lockedRequest.getMerchantAccountId());
+        tx.setPaymentRequestId(lockedRequest.getId());
         tx.setIdempotencyKey(key);
         tx.setCreatedAt(now);
         tx.setUpdatedAt(now);

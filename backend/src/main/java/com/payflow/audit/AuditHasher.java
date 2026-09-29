@@ -2,6 +2,7 @@ package com.payflow.audit;
 
 import com.payflow.common.Hashes;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 public final class AuditHasher {
@@ -29,7 +30,7 @@ public final class AuditHasher {
                 entityId == null ? "" : entityId,
                 before == null ? "" : before,
                 after == null ? "" : after,
-                createdAt.toString());
+                Long.toString(createdAt.truncatedTo(ChronoUnit.MILLIS).toEpochMilli()));
         return Hashes.sha256(payload);
     }
 }

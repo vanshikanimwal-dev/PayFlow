@@ -47,6 +47,9 @@ public class WalletTransaction {
     @Column(name = "reversal_of")
     private UUID reversalOf;
 
+    @Column(name = "payment_request_id")
+    private UUID paymentRequestId;
+
     @Column(name = "refunded_minor", nullable = false)
     private long refundedMinor;
 
@@ -161,6 +164,14 @@ public class WalletTransaction {
 
     public void setReversalOf(UUID reversalOf) {
         this.reversalOf = reversalOf;
+    }
+
+    public UUID getPaymentRequestId() {
+        return paymentRequestId;
+    }
+
+    public void setPaymentRequestId(UUID paymentRequestId) {
+        this.paymentRequestId = paymentRequestId;
     }
 
     public long getRefundedMinor() {

@@ -2,6 +2,8 @@ package com.payflow.audit;
 
 import com.payflow.common.CorrelationIds;
 import com.payflow.common.Jsons;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -17,18 +19,22 @@ public class AuditService {
     private final AuditChainHeadRepository heads;
     private final Jsons jsons;
     private final Clock clock;
+    private final EntityManager entityManager;
 
-    public AuditService(AuditLogRepository logs, AuditChainHeadRepository heads, Jsons jsons, Clock clock) {
+    public AuditService(AuditLogRepository logs, AuditChainHeadRepository heads, Jsons jsons, Clock clock, EntityManager entityManager) {
         this.logs = logs;
         this.heads = heads;
         this.jsons = jsons;
         this.clock = clock;
+        this.entityManager = entityManager;
     }
 
     @Transactional
     public void record(UUID actorId, String actorRole, String action, String entity, String entityId, Object before, Object after) {
+        entityManager.createNativeQuery("select pg_advisory_xact_lock(894231)").getResultList();
         AuditChainHead head = heads.lockHead();
-        Instant createdAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        entityManager.refresh(head, LockModeType.PESSIMISTIC_WRITE);
+        Instant createdAt = clock.instant().truncatedTo(ChronoUnit.MILLIS);
         String beforeJson = jsonState(before);
         String afterJson = jsonState(after);
         String prev = head.getHash();
@@ -65,7 +71,7 @@ public class AuditService {
                     row.getEntityId(),
                     jsonState(row.getBeforeState()),
                     jsonState(row.getAfterState()),
-                    row.getCreatedAt().truncatedTo(ChronoUnit.MICROS));
+                    row.getCreatedAt());
             if (!expected.equals(row.getHash())) {
                 return new AuditVerifyReport(false, row.getId(), "hash does not match the row contents");
             }
