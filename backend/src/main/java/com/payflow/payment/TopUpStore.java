@@ -1,7 +1,7 @@
 package com.payflow.payment;
 
 import com.payflow.account.Account;
-import com.payflow.account.AccountRepository;
+import com.payflow.account.WalletLookup;
 import com.payflow.audit.AuditService;
 import com.payflow.auth.AppUser;
 import com.payflow.auth.UserRepository;
@@ -28,7 +28,7 @@ public class TopUpStore {
 
     private final IdempotencyService idempotency;
     private final UserRepository users;
-    private final AccountRepository accounts;
+    private final WalletLookup wallets;
     private final WalletTransactionRepository transactions;
     private final AuditService audit;
     private final IdGenerator ids;
@@ -37,14 +37,14 @@ public class TopUpStore {
     public TopUpStore(
             IdempotencyService idempotency,
             UserRepository users,
-            AccountRepository accounts,
+            WalletLookup wallets,
             WalletTransactionRepository transactions,
             AuditService audit,
             IdGenerator ids,
             Clock clock) {
         this.idempotency = idempotency;
         this.users = users;
-        this.accounts = accounts;
+        this.wallets = wallets;
         this.transactions = transactions;
         this.audit = audit;
         this.ids = ids;
@@ -66,8 +66,7 @@ public class TopUpStore {
         }
         AppUser user = users.findById(userId)
                 .orElseThrow(() -> new PayflowException(ErrorCode.UNAUTHENTICATED, HttpStatus.UNAUTHORIZED, "Authentication is required"));
-        Account wallet = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        Account wallet = wallets.spending(userId);
         Instant now = clock.instant();
         WalletTransaction tx = new WalletTransaction();
         tx.setId(ids.newId());

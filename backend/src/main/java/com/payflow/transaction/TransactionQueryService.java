@@ -2,6 +2,7 @@ package com.payflow.transaction;
 
 import com.payflow.account.Account;
 import com.payflow.account.AccountRepository;
+import com.payflow.account.WalletLookup;
 import com.payflow.common.ErrorCode;
 import com.payflow.common.PayflowException;
 import com.payflow.ledger.LedgerEntry;
@@ -23,16 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransactionQueryService {
 
     private final AccountRepository accounts;
+    private final WalletLookup wallets;
     private final WalletTransactionRepository transactions;
     private final LedgerEntryRepository entries;
     private final EntityManager entityManager;
 
     public TransactionQueryService(
             AccountRepository accounts,
+            WalletLookup wallets,
             WalletTransactionRepository transactions,
             LedgerEntryRepository entries,
             EntityManager entityManager) {
         this.accounts = accounts;
+        this.wallets = wallets;
         this.transactions = transactions;
         this.entries = entries;
         this.entityManager = entityManager;
@@ -40,15 +44,13 @@ public class TransactionQueryService {
 
     @Transactional(readOnly = true)
     public TransactionDtos.WalletResponse wallet(UUID userId) {
-        Account account = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        Account account = wallets.spending(userId);
         return new TransactionDtos.WalletResponse(account.getId(), account.getBalanceMinor(), account.getCurrency().strip());
     }
 
     @Transactional(readOnly = true)
     public TransactionDtos.TransactionPage page(UUID userId, String cursor, int limit, TransactionType type, TransactionStatus status) {
-        Account account = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        List<Account> owned = wallets.owned(userId);
         int size = Math.min(Math.max(limit <= 0 ? 20 : limit, 1), 100);
         Instant cursorTime = null;
         UUID cursorId = null;
@@ -61,9 +63,12 @@ public class TransactionQueryService {
         CriteriaQuery<WalletTransaction> query = cb.createQuery(WalletTransaction.class);
         Root<WalletTransaction> root = query.from(WalletTransaction.class);
         List<Predicate> predicates = new ArrayList<>();
-        predicates.add(cb.or(
-                cb.equal(root.get("fromAccountId"), account.getId()),
-                cb.equal(root.get("toAccountId"), account.getId())));
+        List<Predicate> accountMatch = new ArrayList<>();
+        for (Account ownedAccount : owned) {
+            accountMatch.add(cb.equal(root.get("fromAccountId"), ownedAccount.getId()));
+            accountMatch.add(cb.equal(root.get("toAccountId"), ownedAccount.getId()));
+        }
+        predicates.add(cb.or(accountMatch.toArray(Predicate[]::new)));
         if (type != null) {
             predicates.add(cb.equal(root.get("type"), type));
         }
@@ -104,9 +109,9 @@ public class TransactionQueryService {
     }
 
     private void assertOwner(UUID userId, WalletTransaction tx) {
-        Account account = accounts.findByOwnerId(userId).orElse(null);
+        List<Account> owned = accounts.findAllByOwnerId(userId);
         boolean owns = userId.equals(tx.getInitiatorId())
-                || (account != null && (account.getId().equals(tx.getFromAccountId()) || account.getId().equals(tx.getToAccountId())));
+                || owned.stream().anyMatch(account -> account.getId().equals(tx.getFromAccountId()) || account.getId().equals(tx.getToAccountId()));
         if (!owns) {
             throw new PayflowException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, "You do not have access to this resource");
         }

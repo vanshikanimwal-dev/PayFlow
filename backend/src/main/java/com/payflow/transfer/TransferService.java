@@ -4,6 +4,7 @@ import com.payflow.account.Account;
 import com.payflow.account.AccountLocker;
 import com.payflow.account.AccountRepository;
 import com.payflow.account.AccountStatus;
+import com.payflow.account.WalletLookup;
 import com.payflow.audit.AuditService;
 import com.payflow.auth.AppUser;
 import com.payflow.auth.UserRepository;
@@ -18,6 +19,7 @@ import com.payflow.idempotency.IdempotencyService;
 import com.payflow.ledger.LedgerService;
 import com.payflow.ledger.Leg;
 import com.payflow.outbox.OutboxWriter;
+import com.payflow.notify.FraudService;
 import com.payflow.transaction.TransactionStatus;
 import com.payflow.transaction.TransactionType;
 import com.payflow.transaction.WalletTransaction;
@@ -50,6 +52,8 @@ public class TransferService {
     private final Clock clock;
     private final PayflowProperties properties;
     private final MeterRegistry meters;
+    private final WalletLookup wallets;
+    private final FraudService fraud;
 
     public TransferService(
             IdempotencyService idempotency,
@@ -63,7 +67,9 @@ public class TransferService {
             IdGenerator ids,
             Clock clock,
             PayflowProperties properties,
-            MeterRegistry meters) {
+            MeterRegistry meters,
+            WalletLookup wallets,
+            FraudService fraud) {
         this.idempotency = idempotency;
         this.users = users;
         this.accounts = accounts;
@@ -76,6 +82,8 @@ public class TransferService {
         this.clock = clock;
         this.properties = properties;
         this.meters = meters;
+        this.wallets = wallets;
+        this.fraud = fraud;
     }
 
     @Transactional
@@ -94,11 +102,12 @@ public class TransferService {
         if (sender.getStatus() != UserStatus.ACTIVE) {
             throw inactive();
         }
-        Account from = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        if (sender.isWalletLocked()) {
+            throw new PayflowException(ErrorCode.WALLET_LOCKED, HttpStatus.UNPROCESSABLE_ENTITY, "Wallet is locked");
+        }
+        Account from = wallets.spending(userId);
         AppUser recipient = resolve(request.toUserEmailOrPhone().trim());
-        Account to = accounts.findByOwnerId(recipient.getId())
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Recipient wallet not found"));
+        Account to = wallets.spending(recipient.getId());
         if (from.getId().equals(to.getId())) {
             throw new PayflowException(ErrorCode.SELF_TRANSFER, HttpStatus.UNPROCESSABLE_ENTITY, "Cannot transfer to yourself");
         }
@@ -110,6 +119,11 @@ public class TransferService {
         long spent = transactions.sumCompletedTransfersSince(userId, startOfDay);
         if (Math.addExact(spent, amount.minorUnits()) > properties.getLimits().getDailyTransferMinor()) {
             throw new PayflowException(ErrorCode.LIMIT_EXCEEDED, HttpStatus.UNPROCESSABLE_ENTITY, "Amount exceeds the daily transfer limit");
+        }
+        Instant startOfMonth = LocalDate.now(clock).withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        long monthSpent = transactions.sumCompletedTransfersSince(userId, startOfMonth);
+        if (Math.addExact(monthSpent, amount.minorUnits()) > properties.getLimits().getMonthlyTransferMinor()) {
+            throw new PayflowException(ErrorCode.LIMIT_EXCEEDED, HttpStatus.UNPROCESSABLE_ENTITY, "Amount exceeds the monthly transfer limit");
         }
         if (from.getStatus() != AccountStatus.ACTIVE || to.getStatus() != AccountStatus.ACTIVE || recipient.getStatus() != UserStatus.ACTIVE) {
             throw inactive();
@@ -144,6 +158,7 @@ public class TransferService {
                 "transactionId", tx.getId().toString(),
                 "amountMinor", amount.minorUnits()));
         idempotency.complete(userId, idempotencyKey, 201, response);
+        fraud.largeTransfer(userId, amount.minorUnits());
         meters.counter("transfers").increment();
         sample.stop(meters.timer("transfer_duration"));
         return response;

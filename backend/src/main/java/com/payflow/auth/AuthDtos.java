@@ -17,7 +17,7 @@ public final class AuthDtos {
             @NotNull UserRole role) {
     }
 
-    public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
+    public record LoginRequest(@NotBlank @Email String email, @NotBlank String password, String code) {
     }
 
     public record RefreshRequest(@NotBlank String refreshToken) {

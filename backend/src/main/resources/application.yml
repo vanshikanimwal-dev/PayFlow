@@ -77,6 +77,8 @@ payflow:
   limits:
     max-transfer-minor: 5000000
     daily-transfer-minor: 10000000
+    monthly-transfer-minor: 50000000
+    cashback-percent: 1
   fees:
     payment-percent: 2
   payments:

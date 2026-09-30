@@ -7,6 +7,8 @@ import com.payflow.reconciliation.ReconciliationItemRepository;
 import com.payflow.reconciliation.ReconciliationRunRepository;
 import com.payflow.reconciliation.ReconciliationService;
 import com.payflow.reconciliation.Resolution;
+import com.payflow.notify.ControlsDtos;
+import com.payflow.notify.FraudFlagRepository;
 import com.payflow.transaction.TransactionStatus;
 import com.payflow.transaction.WalletTransaction;
 import com.payflow.transaction.WalletTransactionRepository;
@@ -40,6 +42,7 @@ public class AdminController {
     private final LedgerInvariantChecker integrity;
     private final AuditService audit;
     private final CurrentUser currentUser;
+    private final FraudFlagRepository fraudFlags;
 
     public AdminController(
             WalletTransactionRepository transactions,
@@ -48,7 +51,8 @@ public class AdminController {
             ReconciliationItemRepository items,
             LedgerInvariantChecker integrity,
             AuditService audit,
-            CurrentUser currentUser) {
+            CurrentUser currentUser,
+            FraudFlagRepository fraudFlags) {
         this.transactions = transactions;
         this.reconciliation = reconciliation;
         this.runs = runs;
@@ -56,6 +60,7 @@ public class AdminController {
         this.integrity = integrity;
         this.audit = audit;
         this.currentUser = currentUser;
+        this.fraudFlags = fraudFlags;
     }
 
     @GetMapping("/transactions")
@@ -123,6 +128,14 @@ public class AdminController {
     @GetMapping("/audit/verify")
     public AuditService.AuditVerifyReport verifyAudit() {
         return audit.verify();
+    }
+
+    @GetMapping("/fraud")
+    public List<ControlsDtos.FraudView> fraud() {
+        return fraudFlags.findByOpenTrueOrderByCreatedAtDesc().stream()
+                .map(flag -> new ControlsDtos.FraudView(
+                        flag.getId(), flag.getUserId(), flag.getKind(), flag.getDetail(), flag.getCreatedAt(), flag.isOpen()))
+                .toList();
     }
 
     public record ResolveRequest(@NotNull Resolution resolution, String note) {

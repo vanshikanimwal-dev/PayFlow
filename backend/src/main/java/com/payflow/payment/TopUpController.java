@@ -1,6 +1,7 @@
 package com.payflow.payment;
 
 import com.payflow.auth.CurrentUser;
+import com.payflow.auth.PinGuard;
 import com.payflow.common.RequestHasher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -22,11 +23,13 @@ public class TopUpController {
     private final CurrentUser currentUser;
     private final TopUpService topUps;
     private final RequestHasher hasher;
+    private final PinGuard pins;
 
-    public TopUpController(CurrentUser currentUser, TopUpService topUps, RequestHasher hasher) {
+    public TopUpController(CurrentUser currentUser, TopUpService topUps, RequestHasher hasher, PinGuard pins) {
         this.currentUser = currentUser;
         this.topUps = topUps;
         this.hasher = hasher;
+        this.pins = pins;
     }
 
     @PostMapping
@@ -36,6 +39,7 @@ public class TopUpController {
             @Valid @RequestBody TopUpDtos.TopUpRequest request,
             HttpServletRequest http) {
         var user = currentUser.require();
+        pins.require(user.id(), http.getHeader("X-Transaction-Pin"));
         return topUps.start(user.id(), idempotencyKey, hasher.hash("POST", http.getRequestURI(), request), request);
     }
 

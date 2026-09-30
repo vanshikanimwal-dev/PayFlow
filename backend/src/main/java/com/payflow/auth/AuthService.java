@@ -11,6 +11,7 @@ import com.payflow.common.Hashes;
 import com.payflow.common.PayflowException;
 import com.payflow.common.RateLimiter;
 import com.payflow.config.PayflowProperties;
+import com.payflow.notify.FraudService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -33,6 +34,7 @@ public class AuthService {
     private final PayflowProperties properties;
     private final RateLimiter rateLimiter;
     private final AuditService audit;
+    private final FraudService fraud;
 
     public AuthService(
             UserRepository users,
@@ -44,7 +46,8 @@ public class AuthService {
             Clock clock,
             PayflowProperties properties,
             RateLimiter rateLimiter,
-            AuditService audit) {
+            AuditService audit,
+            FraudService fraud) {
         this.users = users;
         this.accounts = accounts;
         this.refreshTokens = refreshTokens;
@@ -55,6 +58,7 @@ public class AuthService {
         this.properties = properties;
         this.rateLimiter = rateLimiter;
         this.audit = audit;
+        this.fraud = fraud;
     }
 
     @Transactional
@@ -93,15 +97,19 @@ public class AuthService {
 
         audit.record(user.getId(), user.getRole().name(), "REGISTER", "user", user.getId().toString(), null,
                 Map.of("email", email, "role", user.getRole().name()));
-        return issue(user);
+        return issue(user, "signup");
     }
 
-    @Transactional
-    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request) {
+    @Transactional(noRollbackFor = PayflowException.class)
+    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request, String device) {
         String email = request.email().trim().toLowerCase();
         rateLimiter.login(ClientIp.current(), email);
         AppUser user = users.findByEmail(email).orElse(null);
         if (user == null || !passwords.matches(request.password(), user.getPasswordHash())) {
+            if (user != null) {
+                user.setFailedLogins(user.getFailedLogins() + 1);
+                fraud.failedLogins(user.getId(), user.getFailedLogins());
+            }
             audit.record(user == null ? null : user.getId(), user == null ? null : user.getRole().name(),
                     "LOGIN_FAILED", "user", user == null ? email : user.getId().toString(), null, Map.of("result", "failure"));
             throw new PayflowException(ErrorCode.UNAUTHENTICATED, HttpStatus.UNAUTHORIZED, "Invalid email or password");
@@ -109,8 +117,12 @@ public class AuthService {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new PayflowException(ErrorCode.ACCOUNT_INACTIVE, HttpStatus.UNPROCESSABLE_ENTITY, "Account is not active");
         }
+        if (user.isTotpEnabled() && !Totp.matches(user.getTotpSecret(), request.code(), clock.instant())) {
+            throw new PayflowException(ErrorCode.TWO_FACTOR_REQUIRED, HttpStatus.UNAUTHORIZED, "Authenticator code is required");
+        }
+        user.setFailedLogins(0);
         audit.record(user.getId(), user.getRole().name(), "LOGIN", "user", user.getId().toString(), null, Map.of("result", "success"));
-        return issue(user);
+        return issue(user, device);
     }
 
     @Transactional
@@ -127,7 +139,7 @@ public class AuthService {
         }
         stored.setRevoked(true);
         AppUser user = users.findById(stored.getUserId()).orElseThrow(this::unauthenticated);
-        return issue(user);
+        return issue(user, "refresh");
     }
 
     @Transactional
@@ -140,7 +152,7 @@ public class AuthService {
         stored.setRevoked(true);
     }
 
-    private AuthDtos.AuthResponse issue(AppUser user) {
+    private AuthDtos.AuthResponse issue(AppUser user, String device) {
         String raw = ids.newId() + "." + ids.newId();
         RefreshToken token = new RefreshToken();
         token.setId(ids.newId());
@@ -148,6 +160,8 @@ public class AuthService {
         token.setTokenHash(Hashes.sha256(raw));
         token.setExpiresAt(clock.instant().plus(properties.getJwt().getRefreshTtl()));
         token.setRevoked(false);
+        token.setDeviceLabel(device == null || device.isBlank() ? "browser" : device.trim());
+        token.setCreatedAt(clock.instant());
         refreshTokens.save(token);
         return new AuthDtos.AuthResponse(jwt.accessToken(user), raw, jwt.expiresInSeconds());
     }

@@ -1,5 +1,6 @@
 package com.payflow.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,8 +28,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthDtos.AuthResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
-        return auth.login(request);
+    public AuthDtos.AuthResponse login(@Valid @RequestBody AuthDtos.LoginRequest request, HttpServletRequest http) {
+        String device = http.getHeader("X-Device-Label");
+        return auth.login(request, device);
     }
 
     @PostMapping("/refresh")

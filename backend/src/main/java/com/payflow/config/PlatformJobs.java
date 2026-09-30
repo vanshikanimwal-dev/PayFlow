@@ -6,6 +6,7 @@ import com.payflow.outbox.OutboxPublisher;
 import com.payflow.payment.MerchantPaymentService;
 import com.payflow.reconciliation.ReconciliationService;
 import com.payflow.saga.SagaRecoveryJob;
+import com.payflow.schedule.ScheduleService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -24,6 +25,7 @@ public class PlatformJobs {
     private final LedgerInvariantChecker integrity;
     private final IdempotencyService idempotency;
     private final MerchantPaymentService payments;
+    private final ScheduleService schedules;
     private final Clock clock;
 
     public PlatformJobs(
@@ -33,6 +35,7 @@ public class PlatformJobs {
             LedgerInvariantChecker integrity,
             IdempotencyService idempotency,
             MerchantPaymentService payments,
+            ScheduleService schedules,
             Clock clock) {
         this.outbox = outbox;
         this.saga = saga;
@@ -40,6 +43,7 @@ public class PlatformJobs {
         this.integrity = integrity;
         this.idempotency = idempotency;
         this.payments = payments;
+        this.schedules = schedules;
         this.clock = clock;
     }
 
@@ -77,5 +81,11 @@ public class PlatformJobs {
     @SchedulerLock(name = "expirePaymentRequests", lockAtMostFor = "PT1M")
     public void expirePaymentRequests() {
         payments.expireOpenRequests();
+    }
+
+    @Scheduled(cron = "0 10 0 * * *")
+    @SchedulerLock(name = "scheduledTransfers", lockAtMostFor = "PT30M")
+    public void runScheduledTransfers() {
+        schedules.runDue();
     }
 }

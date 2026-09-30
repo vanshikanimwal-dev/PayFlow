@@ -26,6 +26,12 @@ public class RefreshToken {
     @Column(nullable = false)
     private boolean revoked;
 
+    @Column(name = "device_label", length = 80)
+    private String deviceLabel;
+
+    @Column(name = "created_at")
+    private Instant createdAt;
+
     public UUID getId() {
         return id;
     }
@@ -64,5 +70,21 @@ public class RefreshToken {
 
     public void setRevoked(boolean revoked) {
         this.revoked = revoked;
+    }
+
+    public String getDeviceLabel() {
+        return deviceLabel;
+    }
+
+    public void setDeviceLabel(String deviceLabel) {
+        this.deviceLabel = deviceLabel;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
     }
 }

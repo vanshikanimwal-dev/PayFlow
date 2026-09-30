@@ -3,6 +3,7 @@ package com.payflow.payment;
 import com.payflow.account.Account;
 import com.payflow.account.AccountLocker;
 import com.payflow.account.AccountRepository;
+import com.payflow.account.WalletLookup;
 import com.payflow.account.AccountStatus;
 import com.payflow.account.AccountType;
 import com.payflow.audit.AuditService;
@@ -39,6 +40,7 @@ public class MerchantPaymentService {
 
     private final PaymentRequestRepository requests;
     private final AccountRepository accounts;
+    private final WalletLookup wallets;
     private final UserRepository users;
     private final AccountLocker locker;
     private final WalletTransactionRepository transactions;
@@ -54,6 +56,7 @@ public class MerchantPaymentService {
     public MerchantPaymentService(
             PaymentRequestRepository requests,
             AccountRepository accounts,
+            WalletLookup wallets,
             UserRepository users,
             AccountLocker locker,
             WalletTransactionRepository transactions,
@@ -67,6 +70,7 @@ public class MerchantPaymentService {
             EntityManager entityManager) {
         this.requests = requests;
         this.accounts = accounts;
+        this.wallets = wallets;
         this.users = users;
         this.locker = locker;
         this.transactions = transactions;
@@ -86,7 +90,7 @@ public class MerchantPaymentService {
         if (user.getRole() != UserRole.MERCHANT) {
             throw new PayflowException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, "Only a merchant can create a payment request");
         }
-        Account merchant = accounts.findByOwnerId(merchantUserId)
+        Account merchant = accounts.findByOwnerIdAndType(merchantUserId, AccountType.MERCHANT)
                 .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Merchant account not found"));
         if (merchant.getType() != AccountType.MERCHANT || merchant.getStatus() != AccountStatus.ACTIVE) {
             throw new PayflowException(ErrorCode.ACCOUNT_INACTIVE, HttpStatus.UNPROCESSABLE_ENTITY, "Account is not active");
@@ -131,8 +135,7 @@ public class MerchantPaymentService {
         if (lockedRequest.getStatus() == PaymentRequestStatus.EXPIRED || lockedRequest.getExpiresAt().isBefore(clock.instant())) {
             throw new PayflowException(ErrorCode.VALIDATION_ERROR, HttpStatus.UNPROCESSABLE_ENTITY, "Payment request has expired");
         }
-        Account customer = accounts.findByOwnerId(userId)
-                .orElseThrow(() -> new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Wallet not found"));
+        Account customer = wallets.spending(userId);
         if (customer.getId().equals(lockedRequest.getMerchantAccountId())) {
             throw new PayflowException(ErrorCode.SELF_TRANSFER, HttpStatus.UNPROCESSABLE_ENTITY, "Cannot pay your own request");
         }
@@ -178,6 +181,11 @@ public class MerchantPaymentService {
         legs.add(Leg.credit(lockedRequest.getMerchantAccountId(), merchantAmount));
         if (fee > 0) {
             legs.add(Leg.credit(SystemAccounts.FEE, fee));
+        }
+        long cashback = Fees.percentHalfUp(lockedRequest.getAmountMinor(), properties.getLimits().getCashbackPercent());
+        if (fee > 0 && cashback > 0 && cashback <= fee) {
+            legs.add(Leg.debit(SystemAccounts.FEE, cashback));
+            legs.add(Leg.credit(customer.getId(), cashback));
         }
         ledger.post(tx, locked, legs);
         Account lockedCustomer = AccountLocker.require(locked, customer.getId());

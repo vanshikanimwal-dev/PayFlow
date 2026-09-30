@@ -180,6 +180,8 @@ public class PayflowProperties {
     public static class Limits {
         private long maxTransferMinor = 5_000_000L;
         private long dailyTransferMinor = 10_000_000L;
+        private long monthlyTransferMinor = 50_000_000L;
+        private int cashbackPercent = 1;
 
         public long getMaxTransferMinor() {
             return maxTransferMinor;
@@ -195,6 +197,22 @@ public class PayflowProperties {
 
         public void setDailyTransferMinor(long dailyTransferMinor) {
             this.dailyTransferMinor = dailyTransferMinor;
+        }
+
+        public long getMonthlyTransferMinor() {
+            return monthlyTransferMinor;
+        }
+
+        public void setMonthlyTransferMinor(long monthlyTransferMinor) {
+            this.monthlyTransferMinor = monthlyTransferMinor;
+        }
+
+        public int getCashbackPercent() {
+            return cashbackPercent;
+        }
+
+        public void setCashbackPercent(int cashbackPercent) {
+            this.cashbackPercent = cashbackPercent;
         }
     }
 

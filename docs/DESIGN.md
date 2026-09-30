@@ -84,4 +84,8 @@ Audit rows hash `prev | actor | role | action | entity | entityId | before | aft
 
 MapStruct was not added; API records are mapped by hand. Bucket4j was not added; the rate limiter is a Redis Lua token bucket. Lombok was not added.
 
+## Flutter client
+
+Flow states are Dart 3 sealed classes (`idle`, `submitting`, `checkingStatus`, `success`, `failure`) instead of freezed. The states match SPEC section 13, and the app does not need a second code generator for them. Drift still generates the local schema. The browser build keeps the last wallet in memory because the native sqlite library is not part of that build; Windows uses the Drift file. A confirm tap stores the idempotency key before the call, and a timeout polls `GET /transactions/by-key/{key}` instead of showing a hard failure. `401 TOKEN_EXPIRED` refreshes once and replays the original request.
+
 Gateway chaos rates start at 0. Hostile behavior is `POST /admin/chaos` on the gateway, not the boot default. The gateway stores its own payments in H2 and is not part of the ledger.

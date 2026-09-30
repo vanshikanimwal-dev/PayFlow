@@ -1,6 +1,7 @@
 package com.payflow.transfer;
 
 import com.payflow.auth.CurrentUser;
+import com.payflow.auth.PinGuard;
 import com.payflow.common.RequestHasher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -19,11 +20,13 @@ public class TransferController {
     private final CurrentUser currentUser;
     private final TransferCoordinator transfers;
     private final RequestHasher hasher;
+    private final PinGuard pins;
 
-    public TransferController(CurrentUser currentUser, TransferCoordinator transfers, RequestHasher hasher) {
+    public TransferController(CurrentUser currentUser, TransferCoordinator transfers, RequestHasher hasher, PinGuard pins) {
         this.currentUser = currentUser;
         this.transfers = transfers;
         this.hasher = hasher;
+        this.pins = pins;
     }
 
     @PostMapping
@@ -33,6 +36,7 @@ public class TransferController {
             @Valid @RequestBody TransferDtos.TransferRequest request,
             HttpServletRequest http) {
         var user = currentUser.require();
+        pins.require(user.id(), http.getHeader("X-Transaction-Pin"));
         return transfers.transfer(user.id(), idempotencyKey, hasher.hash("POST", http.getRequestURI(), request), request);
     }
 }

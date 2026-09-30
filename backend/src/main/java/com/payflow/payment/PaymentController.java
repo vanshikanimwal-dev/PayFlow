@@ -1,6 +1,7 @@
 package com.payflow.payment;
 
 import com.payflow.auth.CurrentUser;
+import com.payflow.auth.PinGuard;
 import com.payflow.common.LockRetry;
 import com.payflow.common.OptimisticRetry;
 import com.payflow.common.RateLimiter;
@@ -32,6 +33,7 @@ public class PaymentController {
     private final OptimisticRetry optimisticRetry;
     private final LockRetry lockRetry;
     private final PayflowProperties properties;
+    private final PinGuard pins;
 
     public PaymentController(
             CurrentUser currentUser,
@@ -41,7 +43,8 @@ public class PaymentController {
             RateLimiter rateLimiter,
             OptimisticRetry optimisticRetry,
             LockRetry lockRetry,
-            PayflowProperties properties) {
+            PayflowProperties properties,
+            PinGuard pins) {
         this.currentUser = currentUser;
         this.payments = payments;
         this.refunds = refunds;
@@ -50,6 +53,7 @@ public class PaymentController {
         this.optimisticRetry = optimisticRetry;
         this.lockRetry = lockRetry;
         this.properties = properties;
+        this.pins = pins;
     }
 
     @PostMapping("/merchant/payment-requests")
@@ -72,6 +76,7 @@ public class PaymentController {
             @Valid @RequestBody PaymentDtos.PayRequest request,
             HttpServletRequest http) {
         var user = currentUser.require();
+        pins.require(user.id(), http.getHeader("X-Transaction-Pin"));
         rateLimiter.money(user.id());
         String hash = hasher.hash("POST", http.getRequestURI(), request);
         if (properties.getLocking().optimistic()) {
@@ -87,6 +92,7 @@ public class PaymentController {
             @Valid @RequestBody PaymentDtos.RefundRequest request,
             HttpServletRequest http) {
         var user = currentUser.require();
+        pins.require(user.id(), http.getHeader("X-Transaction-Pin"));
         rateLimiter.money(user.id());
         String hash = hasher.hash("POST", http.getRequestURI(), request);
         if (properties.getLocking().optimistic()) {

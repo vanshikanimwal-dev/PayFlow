@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
@@ -34,6 +35,7 @@ public class GatewayHttpClient implements GatewayClient {
                 .header("Idempotency-Key", reference.toString())
                 .header(CorrelationIds.HEADER, CorrelationIds.current())
                 .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
                 .body(new CreateBody(reference.toString(), amountMinor, method, callbackUrl))
                 .retrieve()
                 .body(GatewayPayment.class));
@@ -68,6 +70,8 @@ public class GatewayHttpClient implements GatewayClient {
             } catch (RestClientResponseException ex) {
                 throw mapStatus(ex);
             } catch (ResourceAccessException ex) {
+                throw new GatewayUnknownException("Gateway timed out", ex);
+            } catch (RestClientException ex) {
                 throw new GatewayUnknownException("Gateway timed out", ex);
             }
         };

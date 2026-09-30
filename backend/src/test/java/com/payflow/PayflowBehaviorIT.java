@@ -306,7 +306,7 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
         }
         assertThat(balance(merchant)).isEqualTo(98_000);
         long fee = accounts.findById(SystemAccounts.FEE).orElseThrow().getBalanceMinor();
-        assertThat(fee).isGreaterThanOrEqualTo(2_000);
+        assertThat(fee).isGreaterThanOrEqualTo(1_000);
     }
 
     @Test
