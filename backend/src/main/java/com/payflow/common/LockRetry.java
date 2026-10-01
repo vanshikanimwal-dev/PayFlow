@@ -1,6 +1,7 @@
 package com.payflow.common;
 
 import java.util.function.Supplier;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
@@ -15,7 +16,11 @@ import org.springframework.stereotype.Service;
 public class LockRetry {
 
     @Retryable(
-            retryFor = {PessimisticLockingFailureException.class, TransientLockException.class},
+            retryFor = {
+                PessimisticLockingFailureException.class,
+                OptimisticLockingFailureException.class,
+                TransientLockException.class
+            },
             noRetryFor = PayflowException.class,
             maxAttempts = 4,
             backoff = @Backoff(delay = 10, multiplier = 2))

@@ -1,7 +1,6 @@
 package com.payflow.account;
 
 import jakarta.persistence.LockModeType;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,7 +17,11 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     List<Account> findAllByOwnerId(UUID ownerId);
 
+    /**
+     * Locks a single row. Callers that need several accounts must call this in ascending id order;
+     * one {@code IN} query can lock rows in plan order and deadlock.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select a from Account a where a.id in :ids order by a.id")
-    List<Account> lockByIds(@Param("ids") Collection<UUID> ids);
+    @Query("select a from Account a where a.id = :id")
+    Optional<Account> lockById(@Param("id") UUID id);
 }

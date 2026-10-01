@@ -95,18 +95,27 @@ public class RefundService {
             throw new PayflowException(ErrorCode.ALREADY_REFUNDED, HttpStatus.UNPROCESSABLE_ENTITY, "Refund exceeds the remaining amount");
         }
         long originalFee = feeCollected(original.getId());
+        long originalCashback = cashbackPaid(original.getId());
         long feeAlready = feeAlreadyRefunded(original.getId());
-        long feePart = request.amountMinor() == remaining
+        long cashbackAlready = cashbackAlreadyRefunded(original.getId());
+        boolean finalSlice = request.amountMinor() == remaining;
+        long feePart = finalSlice
                 ? originalFee - feeAlready
                 : Fees.proportionHalfUp(request.amountMinor(), originalFee, original.getAmountMinor());
+        long cashbackPart = finalSlice
+                ? originalCashback - cashbackAlready
+                : Fees.proportionHalfUp(request.amountMinor(), originalCashback, original.getAmountMinor());
         if (feePart < 0) {
             feePart = 0;
+        }
+        if (cashbackPart < 0) {
+            cashbackPart = 0;
         }
         long destinationPart = request.amountMinor() - feePart;
         List<UUID> accountIds = new ArrayList<>();
         accountIds.add(original.getFromAccountId());
         accountIds.add(original.getToAccountId());
-        if (feePart > 0) {
+        if (feePart > 0 || cashbackPart > 0) {
             accountIds.add(SystemAccounts.FEE);
         }
         List<Account> locked = locker.lock(accountIds);
@@ -132,13 +141,21 @@ public class RefundService {
         refund.transitionTo(TransactionStatus.COMPLETED, now);
         transactions.saveAndFlush(refund);
         List<Leg> legs = new ArrayList<>();
+        // Fee only holds fee minus cashback, so put the cashback back before taking the gross fee.
+        // Credit the payer before clawing cashback back, so a payer who already spent it can still be refunded.
+        if (cashbackPart > 0) {
+            legs.add(Leg.credit(SystemAccounts.FEE, cashbackPart));
+        }
+        legs.add(Leg.credit(lockedOriginal.getFromAccountId(), request.amountMinor()));
+        if (cashbackPart > 0) {
+            legs.add(Leg.debit(lockedOriginal.getFromAccountId(), cashbackPart));
+        }
         if (destinationPart > 0) {
             legs.add(Leg.debit(lockedOriginal.getToAccountId(), destinationPart));
         }
         if (feePart > 0) {
             legs.add(Leg.debit(SystemAccounts.FEE, feePart));
         }
-        legs.add(Leg.credit(lockedOriginal.getFromAccountId(), request.amountMinor()));
         if (legs.size() < 2) {
             throw new PayflowException(ErrorCode.VALIDATION_ERROR, HttpStatus.UNPROCESSABLE_ENTITY, "Refund amount is too small");
         }
@@ -150,24 +167,42 @@ public class RefundService {
         PaymentDtos.RefundResponse response =
                 new PaymentDtos.RefundResponse(refund.getId(), refund.getStatus().name(), lockedOriginal.getRefundedMinor());
         audit.record(userId, role.name(), "REFUND", "transaction", refund.getId().toString(), null,
-                Map.of("originalId", lockedOriginal.getId().toString(), "amountMinor", request.amountMinor(), "feeMinor", feePart));
+                Map.of("originalId", lockedOriginal.getId().toString(), "amountMinor", request.amountMinor(),
+                        "feeMinor", feePart, "cashbackMinor", cashbackPart));
         outbox.enqueue(refund.getId(), "REFUND_COMPLETED", Map.of("transactionId", refund.getId().toString(), "amountMinor", request.amountMinor()));
         idempotency.complete(userId, key, 201, response);
         return response;
     }
 
     private long feeCollected(UUID transactionId) {
+        return feeMovement(transactionId, Direction.CREDIT);
+    }
+
+    /** Cashback is the fee-account debit on the original payment. */
+    private long cashbackPaid(UUID transactionId) {
+        return feeMovement(transactionId, Direction.DEBIT);
+    }
+
+    private long feeMovement(UUID transactionId, Direction direction) {
         return entries.findByTransactionIdOrderByIdAsc(transactionId).stream()
-                .filter(entry -> SystemAccounts.FEE.equals(entry.getAccountId()) && entry.getDirection() == Direction.CREDIT)
+                .filter(entry -> SystemAccounts.FEE.equals(entry.getAccountId()) && entry.getDirection() == direction)
                 .mapToLong(LedgerEntry::getAmountMinor)
                 .sum();
     }
 
     private long feeAlreadyRefunded(UUID originalId) {
+        return refundedFeeMovement(originalId, Direction.DEBIT);
+    }
+
+    private long cashbackAlreadyRefunded(UUID originalId) {
+        return refundedFeeMovement(originalId, Direction.CREDIT);
+    }
+
+    private long refundedFeeMovement(UUID originalId, Direction direction) {
         long total = 0;
         for (WalletTransaction refund : transactions.findCompletedRefunds(originalId)) {
             total += entries.findByTransactionIdOrderByIdAsc(refund.getId()).stream()
-                    .filter(entry -> SystemAccounts.FEE.equals(entry.getAccountId()) && entry.getDirection() == Direction.DEBIT)
+                    .filter(entry -> SystemAccounts.FEE.equals(entry.getAccountId()) && entry.getDirection() == direction)
                     .mapToLong(LedgerEntry::getAmountMinor)
                     .sum();
         }

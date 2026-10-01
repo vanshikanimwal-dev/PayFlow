@@ -2,6 +2,7 @@ package com.payflow.account;
 
 import com.payflow.common.ErrorCode;
 import com.payflow.common.PayflowException;
+import jakarta.persistence.EntityManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -19,10 +20,12 @@ public class PessimisticAccountLocker implements AccountLocker {
 
     private final AccountRepository accounts;
     private final DbLockTimeout lockTimeout;
+    private final EntityManager entityManager;
 
-    public PessimisticAccountLocker(AccountRepository accounts, DbLockTimeout lockTimeout) {
+    public PessimisticAccountLocker(AccountRepository accounts, DbLockTimeout lockTimeout, EntityManager entityManager) {
         this.accounts = accounts;
         this.lockTimeout = lockTimeout;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -30,9 +33,14 @@ public class PessimisticAccountLocker implements AccountLocker {
         List<UUID> sorted = distinctSorted(ids);
         lockTimeout.apply();
         try {
-            List<Account> locked = accounts.lockByIds(sorted);
-            if (locked.size() != sorted.size()) {
-                throw new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Account not found");
+            List<Account> locked = new ArrayList<>(sorted.size());
+            for (UUID id : sorted) {
+                Account account = accounts.lockById(id).orElseThrow(() ->
+                        new PayflowException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, "Account not found"));
+                // The row may already be in the persistence context from an unlocked read. Refresh
+                // so balance and @Version match the locked row; otherwise flush fails optimistic.
+                entityManager.refresh(account);
+                locked.add(account);
             }
             return locked;
         } catch (PayflowException ex) {
