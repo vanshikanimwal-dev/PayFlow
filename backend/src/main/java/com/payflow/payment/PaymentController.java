@@ -9,6 +9,7 @@ import com.payflow.common.RequestHasher;
 import com.payflow.config.PayflowProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,7 +29,8 @@ public class PaymentController {
 
     private final CurrentUser currentUser;
     private final MerchantPaymentService payments;
-    private final RefundService refunds;
+    private final RefundCoordinator refunds;
+    private final PaymentQuoteService quotes;
     private final RequestHasher hasher;
     private final RateLimiter rateLimiter;
     private final OptimisticRetry optimisticRetry;
@@ -38,7 +41,8 @@ public class PaymentController {
     public PaymentController(
             CurrentUser currentUser,
             MerchantPaymentService payments,
-            RefundService refunds,
+            RefundCoordinator refunds,
+            PaymentQuoteService quotes,
             RequestHasher hasher,
             RateLimiter rateLimiter,
             OptimisticRetry optimisticRetry,
@@ -48,6 +52,7 @@ public class PaymentController {
         this.currentUser = currentUser;
         this.payments = payments;
         this.refunds = refunds;
+        this.quotes = quotes;
         this.hasher = hasher;
         this.rateLimiter = rateLimiter;
         this.optimisticRetry = optimisticRetry;
@@ -67,6 +72,12 @@ public class PaymentController {
     public PaymentDtos.PaymentRequestView get(@PathVariable UUID id) {
         currentUser.require();
         return payments.get(id);
+    }
+
+    @GetMapping("/payments/quote")
+    public PaymentDtos.Quote quote(@RequestParam @Positive long amountMinor) {
+        currentUser.require();
+        return quotes.quote(amountMinor);
     }
 
     @PostMapping("/payments")

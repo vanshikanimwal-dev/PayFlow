@@ -16,4 +16,6 @@ abstract class ControlsApi {
   Future<List<dynamic>> requests();
   Future<Map<String, dynamic>> payRequest({required String id, required String idempotencyKey});
   Future<List<dynamic>> fraudFlags();
+  Future<Map<String, dynamic>> quote(int amountMinor);
+  Future<void> dispute({required String transactionId, required String note});
 }

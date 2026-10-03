@@ -10,5 +10,8 @@ public interface GatewayClient {
 
     Optional<GatewayPayment> findByReference(UUID reference);
 
+    /** Card refund. Must be called with no database transaction open. The key is the refund transaction id. */
+    GatewayPayment refund(String paymentId, long amountMinor, String idempotencyKey);
+
     String settlementCsv(LocalDate date);
 }

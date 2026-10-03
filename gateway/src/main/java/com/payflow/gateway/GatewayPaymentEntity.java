@@ -40,6 +40,9 @@ public class GatewayPaymentEntity {
     @Column(name = "refunded_minor", nullable = false)
     private long refundedMinor;
 
+    @Column(name = "refund_idempotency_key", length = 120)
+    private String refundIdempotencyKey;
+
     public String getId() {
         return id;
     }
@@ -118,5 +121,13 @@ public class GatewayPaymentEntity {
 
     public void setRefundedMinor(long refundedMinor) {
         this.refundedMinor = refundedMinor;
+    }
+
+    public String getRefundIdempotencyKey() {
+        return refundIdempotencyKey;
+    }
+
+    public void setRefundIdempotencyKey(String refundIdempotencyKey) {
+        this.refundIdempotencyKey = refundIdempotencyKey;
     }
 }

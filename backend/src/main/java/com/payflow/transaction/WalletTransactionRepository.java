@@ -42,4 +42,13 @@ public interface WalletTransactionRepository
               and t.status = com.payflow.transaction.TransactionStatus.COMPLETED
             """)
     List<WalletTransaction> findCompletedRefunds(@Param("originalId") UUID originalId);
+
+    @Query("""
+            select t from WalletTransaction t
+            where t.reversalOf = :originalId and t.type = com.payflow.transaction.TransactionType.REFUND
+              and t.status in (
+                com.payflow.transaction.TransactionStatus.PENDING,
+                com.payflow.transaction.TransactionStatus.PROCESSING)
+            """)
+    Optional<WalletTransaction> findOpenRefund(@Param("originalId") UUID originalId);
 }

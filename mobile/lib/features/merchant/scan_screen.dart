@@ -30,6 +30,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   final _manual = TextEditingController();
   final _camera = MobileScannerController();
   PaymentRequestView? _request;
+  String? _quote;
   String? _message;
   bool _paying = false;
   bool _handled = false;
@@ -96,6 +97,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             const SizedBox(height: 16),
             Text(Paise.format(request.amountMinor), style: Theme.of(context).textTheme.headlineSmall),
             Text(request.description ?? request.status),
+            if (_quote != null) Text(_quote!),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _paying || !ref.watch(onlineProvider) ? null : _pay,
@@ -119,8 +121,18 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     _handled = true;
     try {
       final request = await ref.read(payflowApiProvider).paymentRequest(id);
+      String? quote;
+      try {
+        final preview = await ref.read(controlsApiProvider).quote(request.amountMinor);
+        final fee = (preview['feeMinor'] as num).toInt();
+        final back = (preview['cashbackMinor'] as num).toInt();
+        quote = 'Fee ${Paise.format(fee)}. Cashback ${Paise.format(back)}.';
+      } catch (_) {
+        quote = null;
+      }
       setState(() {
         _request = request;
+        _quote = quote;
         _message = null;
       });
     } on ApiException catch (error) {
@@ -148,12 +160,34 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       setState(() => _message = 'Paid. ${result.status}. Balance ${Paise.format(result.balanceAfterMinor)}.');
     } on PayflowTimeout {
       setState(() => _message = 'Checking whether the payment completed…');
+      await _poll(key);
     } on ApiException catch (error) {
       setState(() => _message = error.message.isEmpty ? friendlyError(error.code) : error.message);
     } finally {
       if (mounted) {
         setState(() => _paying = false);
       }
+    }
+  }
+
+  Future<void> _poll(String key) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      try {
+        final detail = await ref.read(payflowApiProvider).byKey(key);
+        await ref.read(localCacheProvider).deleteAttempt(key);
+        setState(() => _message = 'Payment ${detail.status}.');
+        return;
+      } on ApiException catch (error) {
+        if (error.status != 404) {
+          setState(() => _message = error.message);
+          return;
+        }
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() => _message = 'Still checking. Open the app again and we will look once more.');
     }
   }
 }

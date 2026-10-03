@@ -29,4 +29,7 @@ public final class PaymentDtos {
 
     public record RefundResponse(UUID transactionId, String status, long refundedMinor) {
     }
+
+    public record Quote(long amountMinor, long feeMinor, long merchantMinor, long cashbackMinor) {
+    }
 }

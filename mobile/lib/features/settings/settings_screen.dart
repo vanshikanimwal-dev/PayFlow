@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,19 @@ import '../../core/app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/payflow_widgets.dart';
 import '../../core/theme/ui_prefs.dart';
+
+Future<void> _unlock(BuildContext context) async {
+  try {
+    final ok = await LocalAuthentication().authenticate(localizedReason: 'Unlock PayFlow');
+    if (ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone lock accepted')));
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This device has no fingerprint or face unlock')));
+    }
+  }
+}
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -55,6 +69,12 @@ class SettingsScreen extends ConsumerWidget {
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
+            title: const Text('Unlock with fingerprint or face'),
+            subtitle: const Text('Uses the lock already on this phone'),
+            onTap: () => _unlock(context),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
             title: const Text('PIN, savings, schedule, requests'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/more'),
@@ -66,7 +86,7 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => context.push('/welcome'),
           ),
           const SizedBox(height: 20),
-          const Text('This app talks to the local PayFlow API. It never sends a real card.'),
+          const Text('This app talks to the PayFlow API. It never sends a real card.'),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: () async {

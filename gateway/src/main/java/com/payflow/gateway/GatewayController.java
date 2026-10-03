@@ -88,8 +88,9 @@ public class GatewayController {
     }
 
     @PostMapping("/v1/refunds")
-    public Map<String, Object> refund(@Valid @RequestBody RefundRequest request) {
-        return view(payments.refund(request.paymentId(), request.amountMinor()));
+    public Map<String, Object> refund(
+            @RequestHeader("Idempotency-Key") String idempotencyKey, @Valid @RequestBody RefundRequest request) {
+        return view(payments.refund(idempotencyKey, request.paymentId(), request.amountMinor()));
     }
 
     @GetMapping(value = "/v1/settlements/{date}.csv", produces = "text/csv")
@@ -109,7 +110,8 @@ public class GatewayController {
                 "status", payment.getStatus(),
                 "amountMinor", payment.getAmountMinor(),
                 "payUrl", "http://localhost:8081/pay/" + payment.getId(),
-                "reference", payment.getReference());
+                "reference", payment.getReference(),
+                "refundedMinor", payment.getRefundedMinor());
     }
 
     public record CreatePayment(@NotBlank String reference, @Positive long amountMinor, @NotBlank String method, String callbackUrl) {

@@ -4,6 +4,7 @@ import com.payflow.common.ErrorCode;
 import com.payflow.common.Jsons;
 import com.payflow.common.PayflowException;
 import com.payflow.payment.TopUpCompletionService;
+import com.payflow.payment.TopUpRefundCompletion;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -17,12 +18,19 @@ public class WebhookService {
     private final EntityManager entityManager;
     private final Jsons jsons;
     private final TopUpCompletionService completion;
+    private final TopUpRefundCompletion cardRefunds;
     private final Clock clock;
 
-    public WebhookService(EntityManager entityManager, Jsons jsons, TopUpCompletionService completion, Clock clock) {
+    public WebhookService(
+            EntityManager entityManager,
+            Jsons jsons,
+            TopUpCompletionService completion,
+            TopUpRefundCompletion cardRefunds,
+            Clock clock) {
         this.entityManager = entityManager;
         this.jsons = jsons;
         this.completion = completion;
+        this.cardRefunds = cardRefunds;
         this.clock = clock;
     }
 
@@ -55,6 +63,7 @@ public class WebhookService {
             switch (event.type() == null ? "" : event.type()) {
                 case "payment.succeeded" -> completion.complete(txId, event.amountMinor(), event.paymentId());
                 case "payment.failed" -> completion.fail(txId, "gateway payment.failed");
+                case "refund.succeeded" -> cardRefunds.completeByOriginal(txId);
                 default -> {
                     // Unknown or refund events are stored so the gateway does not retry forever.
                 }

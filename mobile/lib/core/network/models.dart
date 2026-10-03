@@ -15,17 +15,30 @@ class AuthResult {
 }
 
 class WalletSnapshot {
-  WalletSnapshot({required this.accountId, required this.balanceMinor, required this.currency});
+  WalletSnapshot({
+    required this.accountId,
+    required this.balanceMinor,
+    required this.currency,
+    this.savingsMinor = 0,
+    this.spentMonthMinor = 0,
+    this.monthlyLimitMinor = 0,
+  });
 
   final String accountId;
   final int balanceMinor;
   final String currency;
+  final int savingsMinor;
+  final int spentMonthMinor;
+  final int monthlyLimitMinor;
 
   factory WalletSnapshot.fromJson(Map<String, dynamic> json) {
     return WalletSnapshot(
       accountId: json['accountId'] as String,
       balanceMinor: (json['balanceMinor'] as num).toInt(),
       currency: json['currency'] as String? ?? 'INR',
+      savingsMinor: (json['savingsMinor'] as num?)?.toInt() ?? 0,
+      spentMonthMinor: (json['spentMonthMinor'] as num?)?.toInt() ?? 0,
+      monthlyLimitMinor: (json['monthlyLimitMinor'] as num?)?.toInt() ?? 0,
     );
   }
 }

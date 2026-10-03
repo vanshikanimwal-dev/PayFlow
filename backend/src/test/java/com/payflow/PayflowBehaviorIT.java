@@ -1,6 +1,8 @@
 package com.payflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -271,7 +273,7 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
         WalletTransaction tx = processingTopUp(alice, 7_500, TransactionStatus.PROCESSING);
         jdbc.update("update transactions set updated_at = now() - interval '5 minutes' where id = ?", tx.getId());
         when(gateway.findByReference(tx.getId())).thenReturn(
-                Optional.of(new com.payflow.gatewayclient.GatewayPayment("pi_recover", "CAPTURED", 7_500, "http://pay", tx.getId().toString())));
+                Optional.of(new com.payflow.gatewayclient.GatewayPayment("pi_recover", "CAPTURED", 7_500, "http://pay", tx.getId().toString(), 0)));
         saga.recover();
         saga.recover();
         assertThat(balance(alice)).isEqualTo(7_500);
@@ -337,6 +339,32 @@ class PayflowBehaviorIT extends AbstractIntegrationTest {
                 .andExpect(status().isCreated());
         assertThat(balance(alice)).isEqualTo(200_000);
         assertThat(balance(merchant)).isZero();
+    }
+
+    @Test
+    void topUpRefundReturnsTheMoneyAfterTheGatewayAccepts() throws Exception {
+        Session alice = register("USER");
+        WalletTransaction topup = processingTopUp(alice, 5_000, TransactionStatus.PROCESSING);
+        completion.complete(topup.getId(), 5_000, "pi_card");
+        assertThat(balance(alice)).isEqualTo(5_000);
+        when(gateway.refund(eq("pi_card"), eq(5_000L), anyString())).thenReturn(
+                new com.payflow.gatewayclient.GatewayPayment("pi_card", "CAPTURED", 5_000, "http://pay", topup.getId().toString(), 5_000));
+        mvc.perform(post("/api/v1/refunds")
+                        .header("Authorization", bearer(alice))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transactionId\":\"" + topup.getId() + "\",\"amountMinor\":5000}"))
+                .andExpect(status().isCreated());
+        assertThat(balance(alice)).isZero();
+        mvc.perform(get("/api/v1/payments/quote")
+                        .header("Authorization", bearer(alice))
+                        .param("amountMinor", "100000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.feeMinor").value(2_000))
+                .andExpect(jsonPath("$.cashbackMinor").value(1_000));
+        mvc.perform(get("/api/v1/wallet").header("Authorization", bearer(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.monthlyLimitMinor").exists());
     }
 
     @Test

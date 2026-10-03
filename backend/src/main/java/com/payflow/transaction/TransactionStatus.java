@@ -28,7 +28,8 @@ public enum TransactionStatus {
                     PENDING, EnumSet.of(COMPLETED, FAILED),
                     COMPLETED, EnumSet.of(REVERSED)),
             TransactionType.REFUND, Map.of(
-                    PENDING, EnumSet.of(COMPLETED, FAILED)));
+                    PENDING, EnumSet.of(PROCESSING, COMPLETED, FAILED),
+                    PROCESSING, EnumSet.of(COMPLETED, FAILED)));
 
     public static boolean allowed(TransactionType type, TransactionStatus from, TransactionStatus to) {
         Set<TransactionStatus> next = ALLOWED.getOrDefault(type, Map.of()).get(from);

@@ -56,6 +56,19 @@ public class GatewayHttpClient implements GatewayClient {
     }
 
     @Override
+    public GatewayPayment refund(String paymentId, long amountMinor, String idempotencyKey) {
+        return guard(() -> http.post()
+                .uri("/v1/refunds")
+                .header("Idempotency-Key", idempotencyKey)
+                .header(CorrelationIds.HEADER, CorrelationIds.current())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(new RefundBody(paymentId, amountMinor))
+                .retrieve()
+                .body(GatewayPayment.class));
+    }
+
+    @Override
     public String settlementCsv(LocalDate date) {
         return guard(() -> http.get()
                 .uri("/v1/settlements/{date}.csv", date)
@@ -94,5 +107,8 @@ public class GatewayHttpClient implements GatewayClient {
     }
 
     private record CreateBody(String reference, long amountMinor, String method, String callbackUrl) {
+    }
+
+    private record RefundBody(String paymentId, long amountMinor) {
     }
 }

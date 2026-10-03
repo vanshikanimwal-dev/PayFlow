@@ -312,6 +312,16 @@ class DioPayflowApi implements PayflowApi, ControlsApi {
   @override
   Future<List<dynamic>> fraudFlags() async => (await _send(_dio.get('/admin/fraud'))) as List<dynamic>;
 
+  @override
+  Future<Map<String, dynamic>> quote(int amountMinor) async {
+    return (await _send(_dio.get('/payments/quote', queryParameters: {'amountMinor': amountMinor}))) as Map<String, dynamic>;
+  }
+
+  @override
+  Future<void> dispute({required String transactionId, required String note}) async {
+    await _send(_dio.post('/disputes', data: {'transactionId': transactionId, 'note': note}));
+  }
+
   Future<T> _data<T>(Future<Response<dynamic>> call, T Function(Map<String, dynamic>) parse) async {
     final data = await _send(call);
     return parse(data as Map<String, dynamic>);

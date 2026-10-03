@@ -10,7 +10,15 @@ public final class TransactionDtos {
     private TransactionDtos() {
     }
 
-    public record WalletResponse(UUID accountId, long balanceMinor, String currency) {
+    public record WalletResponse(
+            UUID accountId,
+            long balanceMinor,
+            String currency,
+            long savingsMinor,
+            long spentTodayMinor,
+            long spentMonthMinor,
+            long dailyLimitMinor,
+            long monthlyLimitMinor) {
     }
 
     public record TransactionSummary(

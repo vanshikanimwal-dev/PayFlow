@@ -94,6 +94,9 @@ class HomeScreen extends ConsumerWidget {
             wallet.when(
               data: (value) => _BalanceCard(
                     balance: value?.balanceMinor ?? 0,
+                    savings: value?.savingsMinor ?? 0,
+                    spentMonth: value?.spentMonthMinor ?? 0,
+                    monthlyLimit: value?.monthlyLimitMinor ?? 0,
                     currency: value?.currency ?? 'INR',
                     hidden: prefs.hideBalance,
                   ),
@@ -238,9 +241,19 @@ class _Pending extends ConsumerWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.balance, required this.currency, required this.hidden});
+  const _BalanceCard({
+    required this.balance,
+    required this.savings,
+    required this.spentMonth,
+    required this.monthlyLimit,
+    required this.currency,
+    required this.hidden,
+  });
 
   final int balance;
+  final int savings;
+  final int spentMonth;
+  final int monthlyLimit;
   final String currency;
   final bool hidden;
 
@@ -264,6 +277,17 @@ class _BalanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(currency, style: const TextStyle(color: PayflowColors.gold, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+          if (savings > 0) ...[
+            const SizedBox(height: 8),
+            Text(hidden ? 'Savings hidden' : 'Savings ${Paise.format(savings)}', style: const TextStyle(color: Color(0xFFD7E8E2))),
+          ],
+          if (monthlyLimit > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              hidden ? 'Monthly limit hidden' : 'Sent this month ${Paise.format(spentMonth)} of ${Paise.format(monthlyLimit)}',
+              style: const TextStyle(color: Color(0xFFD7E8E2)),
+            ),
+          ],
         ],
       ),
     );

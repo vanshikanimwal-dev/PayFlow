@@ -4,10 +4,21 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/app_scope.dart';
+import '../../core/network/dio_payflow_api.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/money/paise.dart';
 import '../../core/network/models.dart';
 import '../../core/theme/payflow_widgets.dart';
+
+/// The mock checkout page is served on the API machine. A phone must not open localhost.
+String checkoutUrl(String paymentUrl, String apiBase) {
+  final pay = Uri.parse(paymentUrl);
+  final api = Uri.parse(apiBase);
+  if (pay.host == 'localhost' || pay.host == '127.0.0.1') {
+    return pay.replace(scheme: api.scheme, host: api.host).toString();
+  }
+  return paymentUrl;
+}
 
 class TopUpScreen extends ConsumerStatefulWidget {
   const TopUpScreen({super.key});
@@ -99,7 +110,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
           );
       final url = started.paymentUrl;
       if (url != null && url.isNotEmpty) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        await launchUrl(Uri.parse(checkoutUrl(url, defaultApiBase)), mode: LaunchMode.externalApplication);
       }
       setState(() => _message = 'Finish the mock payment, then wait here.');
       await _poll(started.transactionId, key);

@@ -270,6 +270,8 @@ class DetailScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               _RefundButton(transaction: tx),
             ],
+            const SizedBox(height: 8),
+            _DisputeButton(transactionId: tx.id),
             const SizedBox(height: 16),
             Text('Ledger', style: Theme.of(context).textTheme.titleMedium),
             ...tx.entries.map((line) => ListTile(
@@ -288,10 +290,15 @@ class DetailScreen extends ConsumerWidget {
 }
 
 bool _canRefund(WidgetRef ref, TxDetail tx) {
+  if (tx.status != 'COMPLETED' || tx.refundedMinor >= tx.amountMinor) {
+    return false;
+  }
+  if (tx.type == 'TOPUP') {
+    return true;
+  }
   final session = ref.watch(sessionProvider);
   final allowed = session?.isMerchant == true || session?.isAdmin == true;
-  final open = tx.status == 'COMPLETED' && (tx.type == 'PAYMENT' || tx.type == 'TRANSFER');
-  return allowed && open && tx.refundedMinor < tx.amountMinor;
+  return allowed && (tx.type == 'PAYMENT' || tx.type == 'TRANSFER');
 }
 
 class _RefundButton extends ConsumerStatefulWidget {
@@ -315,7 +322,11 @@ class _RefundButtonState extends ConsumerState<_RefundButton> {
       children: [
         FilledButton.tonal(
           onPressed: _busy ? null : () => _refund(remaining),
-          child: Text(_busy ? 'Refunding…' : 'Refund ${Paise.format(remaining)}'),
+          child: Text(_busy
+              ? 'Working…'
+              : widget.transaction.type == 'TOPUP'
+                  ? 'Send ${Paise.format(remaining)} back to the card'
+                  : 'Refund ${Paise.format(remaining)}'),
         ),
         if (_message != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_message!)),
       ],
@@ -338,6 +349,56 @@ class _RefundButtonState extends ConsumerState<_RefundButton> {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+}
+
+class _DisputeButton extends ConsumerStatefulWidget {
+  const _DisputeButton({required this.transactionId});
+
+  final String transactionId;
+
+  @override
+  ConsumerState<_DisputeButton> createState() => _DisputeButtonState();
+}
+
+class _DisputeButtonState extends ConsumerState<_DisputeButton> {
+  final _note = TextEditingController();
+  String? _message;
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _note,
+          decoration: const InputDecoration(hintText: 'Something wrong? Tell us in a sentence'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(onPressed: _send, child: const Text('Flag this payment')),
+        if (_message != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_message!)),
+      ],
+    );
+  }
+
+  Future<void> _send() async {
+    final note = _note.text.trim();
+    if (note.length < 3) {
+      setState(() => _message = 'Write a short note first.');
+      return;
+    }
+    try {
+      await ref.read(controlsApiProvider).dispute(transactionId: widget.transactionId, note: note);
+      setState(() => _message = 'Flagged. An admin can see it.');
+    } on ApiException catch (error) {
+      setState(() => _message = error.message.isEmpty ? friendlyError(error.code) : error.message);
     }
   }
 }

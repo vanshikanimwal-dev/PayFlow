@@ -8,6 +8,7 @@ import com.payflow.reconciliation.ReconciliationRunRepository;
 import com.payflow.reconciliation.ReconciliationService;
 import com.payflow.reconciliation.Resolution;
 import com.payflow.notify.ControlsDtos;
+import com.payflow.notify.DisputeService;
 import com.payflow.notify.FraudFlagRepository;
 import com.payflow.transaction.TransactionStatus;
 import com.payflow.transaction.WalletTransaction;
@@ -43,6 +44,7 @@ public class AdminController {
     private final AuditService audit;
     private final CurrentUser currentUser;
     private final FraudFlagRepository fraudFlags;
+    private final DisputeService disputes;
 
     public AdminController(
             WalletTransactionRepository transactions,
@@ -52,7 +54,8 @@ public class AdminController {
             LedgerInvariantChecker integrity,
             AuditService audit,
             CurrentUser currentUser,
-            FraudFlagRepository fraudFlags) {
+            FraudFlagRepository fraudFlags,
+            DisputeService disputes) {
         this.transactions = transactions;
         this.reconciliation = reconciliation;
         this.runs = runs;
@@ -61,6 +64,7 @@ public class AdminController {
         this.audit = audit;
         this.currentUser = currentUser;
         this.fraudFlags = fraudFlags;
+        this.disputes = disputes;
     }
 
     @GetMapping("/transactions")
@@ -128,6 +132,11 @@ public class AdminController {
     @GetMapping("/audit/verify")
     public AuditService.AuditVerifyReport verifyAudit() {
         return audit.verify();
+    }
+
+    @GetMapping("/disputes")
+    public List<DisputeService.DisputeView> disputes() {
+        return disputes.openOnes();
     }
 
     @GetMapping("/fraud")

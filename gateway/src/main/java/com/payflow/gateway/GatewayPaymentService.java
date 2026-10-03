@@ -52,9 +52,12 @@ public class GatewayPaymentService {
     }
 
     @Transactional
-    public GatewayPaymentEntity refund(String paymentId, long amountMinor) {
+    public GatewayPaymentEntity refund(String idempotencyKey, String paymentId, long amountMinor) {
         GatewayPaymentEntity payment = payments.findById(paymentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (idempotencyKey != null && idempotencyKey.equals(payment.getRefundIdempotencyKey())) {
+            return payment;
+        }
         if (!"CAPTURED".equals(payment.getStatus())) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Payment is not captured");
         }
@@ -62,6 +65,7 @@ public class GatewayPaymentService {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Refund exceeds the capture");
         }
         payment.setRefundedMinor(payment.getRefundedMinor() + amountMinor);
+        payment.setRefundIdempotencyKey(idempotencyKey);
         webhooks.send(payment.getCallbackUrl(), "refund.succeeded", payment);
         return payment;
     }

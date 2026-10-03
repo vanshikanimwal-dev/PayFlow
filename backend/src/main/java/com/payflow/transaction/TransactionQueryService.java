@@ -5,6 +5,7 @@ import com.payflow.account.AccountRepository;
 import com.payflow.account.WalletLookup;
 import com.payflow.common.ErrorCode;
 import com.payflow.common.PayflowException;
+import com.payflow.config.PayflowProperties;
 import com.payflow.ledger.LedgerEntry;
 import com.payflow.ledger.LedgerEntryRepository;
 import jakarta.persistence.EntityManager;
@@ -13,6 +14,8 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -28,24 +31,38 @@ public class TransactionQueryService {
     private final WalletTransactionRepository transactions;
     private final LedgerEntryRepository entries;
     private final EntityManager entityManager;
+    private final PayflowProperties properties;
 
     public TransactionQueryService(
             AccountRepository accounts,
             WalletLookup wallets,
             WalletTransactionRepository transactions,
             LedgerEntryRepository entries,
-            EntityManager entityManager) {
+            EntityManager entityManager,
+            PayflowProperties properties) {
         this.accounts = accounts;
         this.wallets = wallets;
         this.transactions = transactions;
         this.entries = entries;
         this.entityManager = entityManager;
+        this.properties = properties;
     }
 
     @Transactional(readOnly = true)
     public TransactionDtos.WalletResponse wallet(UUID userId) {
         Account account = wallets.spending(userId);
-        return new TransactionDtos.WalletResponse(account.getId(), account.getBalanceMinor(), account.getCurrency().strip());
+        long savings = wallets.savings(userId).map(Account::getBalanceMinor).orElse(0L);
+        Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant startOfMonth = LocalDate.now(ZoneOffset.UTC).withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return new TransactionDtos.WalletResponse(
+                account.getId(),
+                account.getBalanceMinor(),
+                account.getCurrency().strip(),
+                savings,
+                transactions.sumCompletedTransfersSince(userId, startOfDay),
+                transactions.sumCompletedTransfersSince(userId, startOfMonth),
+                properties.getLimits().getDailyTransferMinor(),
+                properties.getLimits().getMonthlyTransferMinor());
     }
 
     @Transactional(readOnly = true)

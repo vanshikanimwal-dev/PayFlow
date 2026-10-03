@@ -4,6 +4,7 @@ import com.payflow.idempotency.IdempotencyService;
 import com.payflow.ledger.LedgerInvariantChecker;
 import com.payflow.outbox.OutboxPublisher;
 import com.payflow.payment.MerchantPaymentService;
+import com.payflow.payment.TopUpRefundService;
 import com.payflow.reconciliation.ReconciliationService;
 import com.payflow.saga.SagaRecoveryJob;
 import com.payflow.schedule.ScheduleService;
@@ -26,6 +27,7 @@ public class PlatformJobs {
     private final IdempotencyService idempotency;
     private final MerchantPaymentService payments;
     private final ScheduleService schedules;
+    private final TopUpRefundService cardRefunds;
     private final Clock clock;
 
     public PlatformJobs(
@@ -36,6 +38,7 @@ public class PlatformJobs {
             IdempotencyService idempotency,
             MerchantPaymentService payments,
             ScheduleService schedules,
+            TopUpRefundService cardRefunds,
             Clock clock) {
         this.outbox = outbox;
         this.saga = saga;
@@ -44,6 +47,7 @@ public class PlatformJobs {
         this.idempotency = idempotency;
         this.payments = payments;
         this.schedules = schedules;
+        this.cardRefunds = cardRefunds;
         this.clock = clock;
     }
 
@@ -57,6 +61,7 @@ public class PlatformJobs {
     @SchedulerLock(name = "sagaRecovery", lockAtMostFor = "PT5M")
     public void recoverSagas() {
         saga.recover();
+        cardRefunds.recover();
     }
 
     @Scheduled(cron = "0 15 2 * * *")
