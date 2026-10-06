@@ -41,10 +41,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              const SizedBox(height: 48),
-              const CircleAvatar(radius: 28, child: Icon(Icons.account_balance_wallet_outlined)),
+              const SizedBox(height: 36),
+              Text('PayFlow', style: Theme.of(context).textTheme.labelLarge?.copyWith(letterSpacing: 2.4, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              const CircleAvatar(radius: 28, backgroundColor: Color(0xFF146B54), child: Icon(Icons.account_balance_wallet_outlined, color: Colors.white)),
               const SizedBox(height: 16),
-              Text(widget.register ? 'Create a wallet' : 'Welcome back', style: Theme.of(context).textTheme.headlineMedium),
+              Text(widget.register ? 'Create a wallet' : 'Welcome back', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               const Text('Simulated rupees only. Nothing here moves real money.'),
               const SizedBox(height: 24),

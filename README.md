@@ -81,5 +81,4 @@ Outbox publishing defaults to in-process consumers. Compose sets `PAYFLOW_OUTBOX
 
 - Measured k6 numbers (the script is in `scripts/load/transfers.js`)
 - A live deployed demo
-- Top-up card refunds (SPEC 8.5 stretch)
 - A JMH comparison of pessimistic vs optimistic locking (`payflow.locking.strategy=optimistic` is implemented; the benchmark is not)

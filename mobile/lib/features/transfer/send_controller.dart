@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/app_scope.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/money/paise.dart';
 import '../../core/network/models.dart';
 import '../../core/theme/ui_prefs.dart';
 
@@ -61,7 +62,7 @@ class SendController extends Notifier<MoneyState> {
       await ref.read(localCacheProvider).deleteAttempt(key);
       ref.read(uiPrefsProvider.notifier).remember(recipient);
       HapticFeedback.mediumImpact().catchError((_) {});
-      state = MoneySuccess('Sent', '${result.status} · balance ${result.balanceAfterMinor} paise');
+      state = MoneySuccess('Sent', '${Paise.format(amountMinor)} · ${result.status} · left ${Paise.format(result.balanceAfterMinor)}');
     } on PayflowTimeout {
       state = MoneyChecking('Checking whether the transfer completed…');
       await _poll(key);

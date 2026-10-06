@@ -63,6 +63,17 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(labelText: 'Amount (INR)', errorText: _amountError),
           ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final rupees in const [50, 100, 500, 1000])
+                ActionChip(
+                  label: Text('₹$rupees'),
+                  onPressed: () => setState(() => _amount.text = '$rupees'),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note')),
           const SizedBox(height: 20),

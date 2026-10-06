@@ -51,6 +51,8 @@ class TxSummary {
     required this.amountMinor,
     required this.currency,
     required this.createdAt,
+    this.fromAccountId,
+    this.toAccountId,
   });
 
   final String id;
@@ -59,6 +61,8 @@ class TxSummary {
   final int amountMinor;
   final String currency;
   final DateTime createdAt;
+  final String? fromAccountId;
+  final String? toAccountId;
 
   factory TxSummary.fromJson(Map<String, dynamic> json) {
     return TxSummary(
@@ -68,8 +72,30 @@ class TxSummary {
       amountMinor: (json['amountMinor'] as num).toInt(),
       currency: json['currency'] as String? ?? 'INR',
       createdAt: DateTime.parse(json['createdAt'] as String),
+      fromAccountId: json['fromAccountId'] as String?,
+      toAccountId: json['toAccountId'] as String?,
     );
   }
+}
+
+/// True when this row adds money to [mine]. False when it leaves [mine].
+bool? moneyComingIn({
+  required String type,
+  String? fromAccountId,
+  String? toAccountId,
+  String? mine,
+}) {
+  if (mine != null && toAccountId == mine) {
+    return true;
+  }
+  if (mine != null && fromAccountId == mine) {
+    return false;
+  }
+  return switch (type) {
+    'TOPUP' || 'REFUND' => true,
+    'TRANSFER' || 'PAYMENT' => false,
+    _ => null,
+  };
 }
 
 class TxPage {

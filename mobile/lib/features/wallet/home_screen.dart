@@ -120,9 +120,12 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
             recent.when(
-              data: (items) => Column(
+              data: (items) {
+                final mine = wallet.value?.accountId;
+                return Column(
                 children: [
                   if (items.length > 1) SizedBox(height: 120, child: _Chart(items: items)),
+                  if (items.isNotEmpty) _Flow(items: items.take(5).toList(), mine: mine),
                   if (items.isEmpty)
                     SurfaceCard(
                       child: Column(
@@ -135,16 +138,24 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ...items.take(5).map((item) {
                     final when = DateFormat.MMMd().add_jm().format(item.createdAt.toLocal());
+                    final inbound = moneyComingIn(
+                      type: item.type,
+                      fromAccountId: item.fromAccountId,
+                      toAccountId: item.toAccountId,
+                      mine: mine,
+                    );
                     return TxRow(
                       type: item.type,
                       status: item.status,
                       when: when,
                       amountMinor: item.amountMinor,
+                      inbound: inbound,
                       onTap: () => context.go('/history/${item.id}'),
                     );
                   }),
                 ],
-              ),
+              );
+              },
               loading: () => const _Skeleton(height: 72),
               error: (_, _) => const Text('History is unavailable.'),
             ),
@@ -164,15 +175,22 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _Action(icon: Icons.north_east, label: tr(hindi, 'send'), onTap: online ? () => context.go('/send') : null),
-        _Action(icon: Icons.add, label: tr(hindi, 'topup'), onTap: online ? () => context.go('/topup') : null),
-        _Action(icon: Icons.qr_code_scanner, label: tr(hindi, 'scan'), onTap: online ? () => context.go('/scan') : null),
-        _Action(icon: Icons.group_outlined, label: 'Split', onTap: online ? () => context.push('/more') : null),
-        if (session?.isMerchant == true) _Action(icon: Icons.qr_code_2, label: 'Request', onTap: () => context.go('/merchant')),
-        if (session?.isAdmin == true) _Action(icon: Icons.admin_panel_settings_outlined, label: 'Admin', onTap: () => context.go('/admin')),
-      ],
+    final actions = <Widget>[
+      _Action(icon: Icons.north_east, label: tr(hindi, 'send'), onTap: online ? () => context.go('/send') : null),
+      _Action(icon: Icons.add, label: tr(hindi, 'topup'), onTap: online ? () => context.go('/topup') : null),
+      _Action(icon: Icons.qr_code_scanner, label: tr(hindi, 'scan'), onTap: online ? () => context.go('/scan') : null),
+      _Action(icon: Icons.tune, label: 'Tools', onTap: online ? () => context.push('/more') : null),
+      if (session?.isMerchant == true) _Action(icon: Icons.qr_code_2, label: 'Request', onTap: () => context.go('/merchant')),
+      if (session?.isAdmin == true) _Action(icon: Icons.admin_panel_settings_outlined, label: 'Admin', onTap: () => context.go('/admin')),
+    ];
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: actions.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, index) => actions[index],
+      ),
     );
   }
 }
@@ -186,7 +204,8 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
+    return SizedBox(
+      width: 76,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -195,12 +214,12 @@ class _Action extends StatelessWidget {
           child: Column(
             children: [
               CircleAvatar(
-                radius: 24,
+                radius: 26,
                 backgroundColor: onTap == null ? const Color(0xFF2E4038) : const Color(0xFF146B54),
                 child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(height: 6),
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -282,10 +301,20 @@ class _BalanceCard extends StatelessWidget {
             Text(hidden ? 'Savings hidden' : 'Savings ${Paise.format(savings)}', style: const TextStyle(color: Color(0xFFD7E8E2))),
           ],
           if (monthlyLimit > 0) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                minHeight: 6,
+                value: (spentMonth / monthlyLimit).clamp(0, 1).toDouble(),
+                backgroundColor: const Color(0x33FFFFFF),
+                color: spentMonth > monthlyLimit ? const Color(0xFFFFB4A8) : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
               hidden ? 'Monthly limit hidden' : 'Sent this month ${Paise.format(spentMonth)} of ${Paise.format(monthlyLimit)}',
-              style: const TextStyle(color: Color(0xFFD7E8E2)),
+              style: const TextStyle(color: Color(0xFFD7E8E2), fontSize: 13),
             ),
           ],
         ],
@@ -331,6 +360,70 @@ class _Skeleton extends StatelessWidget {
   }
 }
 
+class _Flow extends StatelessWidget {
+  const _Flow({required this.items, required this.mine});
+
+  final List<TxSummary> items;
+  final String? mine;
+
+  @override
+  Widget build(BuildContext context) {
+    var incoming = 0;
+    var outgoing = 0;
+    for (final item in items) {
+      if (item.status != 'COMPLETED') {
+        continue;
+      }
+      final coming = moneyComingIn(
+        type: item.type,
+        fromAccountId: item.fromAccountId,
+        toAccountId: item.toAccountId,
+        mine: mine,
+      );
+      if (coming == true) {
+        incoming += item.amountMinor;
+      } else if (coming == false) {
+        outgoing += item.amountMinor;
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(child: _FlowChip(label: 'In', amountMinor: incoming, inbound: true)),
+          const SizedBox(width: 8),
+          Expanded(child: _FlowChip(label: 'Out', amountMinor: outgoing, inbound: false)),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlowChip extends StatelessWidget {
+  const _FlowChip({required this.label, required this.amountMinor, required this.inbound});
+
+  final String label;
+  final int amountMinor;
+  final bool inbound;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = inbound ? (dark ? const Color(0xFF3DDC97) : PayflowColors.green) : (dark ? const Color(0xFFFFB4A8) : PayflowColors.danger);
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(Paise.format(amountMinor), style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
 class _Chart extends StatelessWidget {
   const _Chart({required this.items});
 
@@ -346,7 +439,12 @@ class _Chart extends StatelessWidget {
       barGroups: [
         for (var i = 0; i < bars.length; i++)
           BarChartGroupData(x: i, barRods: [
-            BarChartRodData(toY: bars[i].amountMinor / 100, width: 14, color: const Color(0xFF0F6E56)),
+            BarChartRodData(
+              toY: bars[i].amountMinor / 100,
+              width: 14,
+              borderRadius: BorderRadius.circular(6),
+              color: bars[i].type == 'TOPUP' || bars[i].type == 'REFUND' ? const Color(0xFF3DDC97) : const Color(0xFFC4A574),
+            ),
           ]),
       ],
     ));
@@ -360,7 +458,16 @@ class _OfflineBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.only(bottom: 12),
-      child: Text('Offline. You can look at the last balance, but sending money is paused.'),
+      child: SurfaceCard(
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off_outlined, color: PayflowColors.gold),
+            SizedBox(width: 10),
+            Expanded(child: Text('You are offline. The last balance is still here. Sending money is paused.')),
+          ],
+        ),
+      ),
     );
   }
 }

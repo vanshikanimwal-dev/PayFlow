@@ -9,6 +9,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/money/paise.dart';
 import '../../core/network/models.dart';
 import '../../core/theme/payflow_widgets.dart';
+import '../wallet/home_screen.dart';
 import 'statement.dart';
 import 'statement_download.dart';
 
@@ -122,6 +123,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   );
                 }
                 final item = _visible[index];
+                final mine = ref.watch(walletProvider).value?.accountId;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: TxRow(
@@ -129,6 +131,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     status: item.status,
                     when: DateFormat.yMMMd().add_jm().format(item.createdAt.toLocal()),
                     amountMinor: item.amountMinor,
+                    inbound: moneyComingIn(
+                      type: item.type,
+                      fromAccountId: item.fromAccountId,
+                      toAccountId: item.toAccountId,
+                      mine: mine,
+                    ),
                     onTap: () => context.go('/history/${item.id}'),
                   ),
                 );

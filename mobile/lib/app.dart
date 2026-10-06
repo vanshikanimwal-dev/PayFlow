@@ -83,7 +83,7 @@ class _PayflowAppState extends ConsumerState<PayflowApp> {
     final prefs = ref.watch(uiPrefsProvider);
     return MaterialApp.router(
       title: 'PayFlow',
-      theme: payflowDarkTheme(),
+      theme: payflowTheme(),
       darkTheme: payflowDarkTheme(),
       themeMode: prefs.dark ? ThemeMode.dark : ThemeMode.light,
       routerConfig: _router,
