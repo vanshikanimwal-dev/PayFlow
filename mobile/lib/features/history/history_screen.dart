@@ -119,9 +119,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           Expanded(
             child: ListView.builder(
               controller: _scroll,
-              itemCount: _visible.length + 1,
+              itemCount: _rows.length + 1,
               itemBuilder: (context, index) {
-                if (index == _visible.length) {
+                if (index == _rows.length) {
                   return Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
@@ -133,14 +133,22 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     ),
                   );
                 }
-                final item = _visible[index];
+                final row = _rows[index];
+                final header = row.label;
+                if (header != null) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Text(header, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  );
+                }
+                final item = row.item!;
                 final mine = ref.watch(walletProvider).value?.accountId;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: TxRow(
                     type: item.type,
                     status: item.status,
-                    when: DateFormat.yMMMd().add_jm().format(item.createdAt.toLocal()),
+                    when: DateFormat.MMMd().add_jm().format(item.createdAt.toLocal()),
                     amountMinor: item.amountMinor,
                     inbound: moneyComingIn(
                       type: item.type,
@@ -183,6 +191,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       return true;
     }).toList();
   }
+
+  List<ActivityRow> get _rows => activityRows(_visible, DateTime.now());
 
   void _statement() {
     final lines = [
@@ -255,6 +265,41 @@ String activityEmptyLine({required bool loadedAny, required bool filtered}) {
     return 'No payments yet. Add money from the wallet screen.';
   }
   return 'Nothing matches this filter.';
+}
+
+class ActivityRow {
+  const ActivityRow.header(this.label) : item = null;
+  const ActivityRow.item(this.item) : label = null;
+
+  final String? label;
+  final TxSummary? item;
+}
+
+String activityDayLabel(DateTime createdAt, DateTime now) {
+  final day = DateTime(createdAt.year, createdAt.month, createdAt.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) {
+    return 'Today';
+  }
+  if (diff == 1) {
+    return 'Yesterday';
+  }
+  return DateFormat.MMMd().format(createdAt);
+}
+
+List<ActivityRow> activityRows(List<TxSummary> items, DateTime now) {
+  final rows = <ActivityRow>[];
+  String? last;
+  for (final item in items) {
+    final label = activityDayLabel(item.createdAt.toLocal(), now);
+    if (label != last) {
+      rows.add(ActivityRow.header(label));
+      last = label;
+    }
+    rows.add(ActivityRow.item(item));
+  }
+  return rows;
 }
 
 class _Filter extends StatelessWidget {

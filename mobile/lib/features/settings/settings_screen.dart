@@ -8,6 +8,27 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/payflow_widgets.dart';
 import '../../core/theme/ui_prefs.dart';
 
+Future<void> _rename(BuildContext context, WidgetRef ref, String current) async {
+  final controller = TextEditingController(text: current);
+  final saved = await showDialog<String>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Your name'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+  if (saved != null) {
+    ref.read(uiPrefsProvider.notifier).rename(saved);
+  }
+}
+
 Future<void> _unlock(BuildContext context) async {
   try {
     final ok = await LocalAuthentication().authenticate(localizedReason: 'Unlock PayFlow');
@@ -34,25 +55,39 @@ class SettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(20),
         children: [
           SurfaceCard(
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: PayflowColors.greenDeep,
-                  child: Text(
-                    (session?.email ?? '?').substring(0, 1).toUpperCase(),
-                    style: const TextStyle(color: Colors.white),
+            child: InkWell(
+              onTap: session == null ? null : () => copyPayId(context, session.email),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: PayflowColors.greenDeep,
+                    child: Text(
+                      (session?.email ?? '?').substring(0, 1).toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(session?.email ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text(session?.role ?? ''),
-                  ],
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(session?.email ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(session?.role ?? ''),
+                        const Text('Tap to copy your email'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Your name'),
+            subtitle: Text(prefs.displayName.isEmpty ? 'Shown on the wallet' : prefs.displayName),
+            trailing: const Icon(Icons.edit_outlined),
+            onTap: () => _rename(context, ref, prefs.displayName),
           ),
           const SizedBox(height: 16),
           SwitchListTile(

@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../money/paise.dart';
 import 'app_theme.dart';
+
+Future<void> copyPayId(BuildContext context, String email) async {
+  await Clipboard.setData(ClipboardData(text: email));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied $email')));
+  }
+}
 
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.status});

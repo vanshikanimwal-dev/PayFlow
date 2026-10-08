@@ -88,7 +88,17 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
           children: [
-            Text('${tr(prefs.hindi, 'hello')}, $name', style: Theme.of(context).textTheme.titleMedium),
+            Text('${timeGreeting(DateTime.now(), hindi: prefs.hindi)}, $name', style: Theme.of(context).textTheme.titleMedium),
+            if (session != null) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => copyPayId(context, session.email),
+                  child: Text('Copy ${session.email}'),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (!online) const _OfflineBanner(),
             wallet.when(
@@ -343,7 +353,9 @@ class _BalanceCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              hidden ? 'Monthly limit hidden' : 'Sent this month ${Paise.format(spentMonth)} of ${Paise.format(monthlyLimit)}',
+              hidden
+                  ? 'Monthly limit hidden'
+                  : monthLeftLine(spent: spentMonth, limit: monthlyLimit),
               style: const TextStyle(color: Color(0xFFD7E8E2), fontSize: 13),
             ),
           ],
@@ -351,6 +363,14 @@ class _BalanceCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String monthLeftLine({required int spent, required int limit}) {
+  final left = limit - spent;
+  if (left >= 0) {
+    return '${Paise.format(left)} left this month';
+  }
+  return '${Paise.format(-left)} over this month';
 }
 
 class _Favorites extends StatelessWidget {

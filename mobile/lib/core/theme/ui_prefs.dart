@@ -60,6 +60,8 @@ class UiPrefs extends Notifier<UiState> {
 
   void finishOnboarding(String name) => state = state.copy(onboarded: true, displayName: name);
 
+  void rename(String name) => state = state.copy(displayName: name.trim());
+
   void remember(String email) {
     final next = [email, ...state.favorites.where((item) => item != email)].take(6).toList();
     state = state.copy(favorites: next);
@@ -92,6 +94,26 @@ String? recentPayWarning({
 }
 
 final uiPrefsProvider = NotifierProvider<UiPrefs, UiState>(UiPrefs.new);
+
+String timeGreeting(DateTime local, {bool hindi = false}) {
+  final hour = local.hour;
+  if (hindi) {
+    if (hour < 12) {
+      return 'सुप्रभात';
+    }
+    if (hour < 17) {
+      return 'नमस्ते';
+    }
+    return 'शुभ संध्या';
+  }
+  if (hour < 12) {
+    return 'Good morning';
+  }
+  if (hour < 17) {
+    return 'Good afternoon';
+  }
+  return 'Good evening';
+}
 
 String tr(bool hindi, String key) {
   const en = {
