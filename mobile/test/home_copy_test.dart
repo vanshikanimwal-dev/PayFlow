@@ -12,8 +12,8 @@ void main() {
   });
 
   test('monthly room left is whole rupees', () {
-    expect(monthLeftLine(spent: 20000, limit: 500000), '₹4,800.00 left this month');
-    expect(monthLeftLine(spent: 600000, limit: 500000), '₹1,000.00 over this month');
+    expect(monthLeftLine(spent: 20000, limit: 500000), 'Send limit ₹4,800.00 left of ₹5,000.00');
+    expect(monthLeftLine(spent: 600000, limit: 500000), 'Send limit exceeded by ₹1,000.00');
   });
 
   test('activity groups today and yesterday under one heading each', () {

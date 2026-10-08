@@ -58,10 +58,33 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       appBar: AppBar(
         title: const Text('Activity'),
         actions: [
-          IconButton(tooltip: 'Download statement', onPressed: _statement, icon: const Icon(Icons.picture_as_pdf_outlined)),
+          IconButton(
+            tooltip: 'Download statement',
+            onPressed: _items.isEmpty ? null : _statement,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
         ],
       ),
-      body: Column(
+      body: _showEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.receipt_long_outlined, size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      activityEmptyLine(loadedAny: false, filtered: false),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: () => context.go('/topup'), child: const Text('Add money')),
+                  ],
+                ),
+              ),
+            )
+          : Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -166,6 +189,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ),
     );
   }
+
+  bool get _showEmpty => !_loading && _items.isEmpty && !_filtered;
 
   bool get _filtered {
     return _type != null || _status != null || _search.text.trim().isNotEmpty || _min.text.trim().isNotEmpty || _max.text.trim().isNotEmpty;

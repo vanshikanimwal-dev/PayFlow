@@ -93,9 +93,10 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
+                child: TextButton.icon(
                   onPressed: () => copyPayId(context, session.email),
-                  child: Text('Copy ${session.email}'),
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text('Copy my email'),
                 ),
               ),
             ],
@@ -368,9 +369,9 @@ class _BalanceCard extends StatelessWidget {
 String monthLeftLine({required int spent, required int limit}) {
   final left = limit - spent;
   if (left >= 0) {
-    return '${Paise.format(left)} left this month';
+    return 'Send limit ${Paise.format(left)} left of ${Paise.format(limit)}';
   }
-  return '${Paise.format(-left)} over this month';
+  return 'Send limit exceeded by ${Paise.format(-left)}';
 }
 
 class _Favorites extends StatelessWidget {

@@ -2,7 +2,9 @@
 
 Wallet and payments **simulation**. It never handles real card data or real money. Amounts are integer paise (`long`), currency INR.
 
-The backend covers SPEC phases 1–7: auth, ledger, transfers, locking, idempotency, the mock gateway, top-ups, merchant payments, refunds, reconciliation, audit, and admin APIs. The Flutter client in `mobile/` covers auth, wallet, send, top-up, history, merchant QR, scan-and-pay, and the admin checks.
+The backend covers SPEC phases 1–7: auth, ledger, transfers, locking, idempotency, the mock gateway, top-ups, merchant payments, refunds, reconciliation, audit, and admin APIs. Later additions are a savings wallet, transfer limits, a transaction PIN, scheduled transfers, split requests, 1% cashback, in-app receipts, disputes, a fee quote, and card top-up refunds.
+
+The Flutter client in `mobile/` covers register and login, the wallet, send, top-up, history, merchant QR, scan-and-pay, and the admin checks. Before a transfer it looks up the recipient and shows their name. A repeat to the same person within 10 minutes is called out. An empty wallet points at Add money. Activity groups payments by day. Settings can copy the pay email and set the name shown on the wallet.
 
 ## Run locally
 
@@ -28,14 +30,22 @@ cd backend
 
 On Windows use `mvnw.cmd`. The default profile is `local`. `prod` reads `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD`.
 
-The Flutter app expects the API at `http://localhost:8080`. From `mobile`:
+The Flutter app expects the API at `http://localhost:8080/api/v1`. From `mobile`:
 
 ```bash
 flutter pub get
 flutter run -d chrome
 ```
 
-On Windows, if `flutter` is not on `PATH`, use the full path to `flutter.bat`. Chrome is the straightforward local client. A Windows desktop build needs Developer Mode so Flutter can create plugin symlinks.
+On Windows, if `flutter` is not on `PATH`, use the full path to `flutter.bat`. Chrome is the straightforward local client. The browser may call the API because CORS allows `http://localhost:*`. A Windows desktop build needs Developer Mode so Flutter can create plugin symlinks.
+
+A phone cannot use `localhost`; that address is the phone itself. Start Docker, put the phone on the same Wi-Fi, and pass the computer's Wi-Fi address:
+
+```bash
+flutter run -d <device> --dart-define=API_BASE=http://<pc-wifi-ip>:8080/api/v1
+```
+
+Without a USB cable, turn on Wireless debugging, `adb pair <phone-ip>:<pairing-port> <code>`, then `adb connect <phone-ip>:<debug-port>`. The debug port is the one on the main Wireless debugging screen, not the pairing popup. Register a customer in the app (password at least 8 characters). The seeded admin is only for the admin checks. The authenticator box stays empty unless that account turned on a code.
 
 ## Architecture
 
@@ -64,10 +74,10 @@ cd backend
 ./mvnw test                                           # unit tests, no Docker
 ./mvnw -f ../gateway/pom.xml test                     # mock gateway (H2)
 ./mvnw verify                                         # unit + Testcontainers Postgres 16 and Redis 7
-cd ../mobile && flutter test                          # money parsing, idempotency header, send-money widgets
+cd ../mobile && flutter test                          # money parsing, send confirmation, activity grouping
 ```
 
-`PayflowBehaviorIT` covers transfers, the 50-way idempotent replay, key reuse, cursor pagination, 100 concurrent transfers, A↔B / B↔A 1000 times each way, duplicate and out-of-order webhooks, bad signatures, saga recovery, double QR payment, a full refund, reconciliation auto-fix, integrity and audit tamper detection, the ledger append-only trigger, the Redis token bucket, and admin login.
+`PayflowBehaviorIT` covers transfers, the 50-way idempotent replay, key reuse, cursor pagination, 100 concurrent transfers, A↔B / B↔A 1000 times each way, duplicate and out-of-order webhooks, bad signatures, saga recovery, double QR payment, a full refund, a card top-up refund, the fee quote, reconciliation auto-fix, integrity and audit tamper detection, the ledger append-only trigger, the Redis token bucket, and admin login.
 
 ## Money movement
 
@@ -75,7 +85,9 @@ Every completed movement posts balanced ledger legs (signed sum zero). User bala
 
 Money-moving POSTs require `Idempotency-Key` (8–100 characters). The same key and body replay the stored response. A different body returns `409 IDEMPOTENCY_KEY_REUSED`. A business failure such as insufficient balance rolls the key back, so the same key can be retried after the user tops up.
 
-Outbox publishing defaults to in-process consumers. Compose sets `PAYFLOW_OUTBOX_BROKER=rabbit`, which publishes to the `payflow.events` exchange.
+A shop payment takes a 2% fee. When that fee is large enough, 1% comes back to the customer as its own ledger line. A full refund returns the principal and takes that cashback back. A card top-up refund is a separate saga: the refund row is saved, the gateway is called outside the lock, and the wallet is debited only after the gateway accepts. `GET /api/v1/transfers/recipient?q=` returns the name shown before a send. It does not move money and does not need an idempotency key.
+
+Outbox publishing defaults to in-process consumers. Compose sets `PAYFLOW_OUTBOX_BROKER=rabbit`, which publishes to the `payflow.events` exchange. Receipts are written in the app and logged. They are not sent as real email or SMS.
 
 ## Not in this tree
 
