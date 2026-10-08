@@ -1,5 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../money/paise.dart';
+
+class RecentPay {
+  const RecentPay({required this.recipient, required this.amountMinor, required this.at});
+
+  final String recipient;
+  final int amountMinor;
+  final DateTime at;
+}
+
 class UiState {
   const UiState({
     this.dark = true,
@@ -8,6 +18,7 @@ class UiState {
     this.onboarded = false,
     this.displayName = '',
     this.favorites = const [],
+    this.recent = const [],
   });
 
   final bool dark;
@@ -16,6 +27,7 @@ class UiState {
   final bool onboarded;
   final String displayName;
   final List<String> favorites;
+  final List<RecentPay> recent;
 
   UiState copy({
     bool? dark,
@@ -24,6 +36,7 @@ class UiState {
     bool? onboarded,
     String? displayName,
     List<String>? favorites,
+    List<RecentPay>? recent,
   }) {
     return UiState(
       dark: dark ?? this.dark,
@@ -32,6 +45,7 @@ class UiState {
       onboarded: onboarded ?? this.onboarded,
       displayName: displayName ?? this.displayName,
       favorites: favorites ?? this.favorites,
+      recent: recent ?? this.recent,
     );
   }
 }
@@ -50,6 +64,31 @@ class UiPrefs extends Notifier<UiState> {
     final next = [email, ...state.favorites.where((item) => item != email)].take(6).toList();
     state = state.copy(favorites: next);
   }
+
+  void rememberPayment(String recipient, int amountMinor) {
+    final next = [
+      RecentPay(recipient: recipient, amountMinor: amountMinor, at: DateTime.now().toUtc()),
+      ...state.recent.where((item) => item.recipient.toLowerCase() != recipient.toLowerCase()),
+    ].take(8).toList();
+    state = state.copy(recent: next);
+  }
+}
+
+String? recentPayWarning({
+  required List<RecentPay> pays,
+  required String recipient,
+  required DateTime now,
+}) {
+  for (final pay in pays) {
+    if (pay.recipient.toLowerCase() != recipient.toLowerCase()) {
+      continue;
+    }
+    if (now.difference(pay.at) > const Duration(minutes: 10)) {
+      continue;
+    }
+    return 'You already sent ${Paise.format(pay.amountMinor)} to this person. Send again only if you mean to.';
+  }
+  return null;
 }
 
 final uiPrefsProvider = NotifierProvider<UiPrefs, UiState>(UiPrefs.new);

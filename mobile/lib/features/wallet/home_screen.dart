@@ -104,6 +104,13 @@ class HomeScreen extends ConsumerWidget {
               error: (error, _) => Text(friendlyError('NETWORK')),
             ),
             const SizedBox(height: 18),
+            wallet.when(
+              data: (value) => (value?.balanceMinor ?? 0) == 0
+                  ? const _AddMoney()
+                  : const SizedBox.shrink(),
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
             _Actions(online: online, session: session, hindi: prefs.hindi),
             if (prefs.favorites.isNotEmpty) _Favorites(emails: prefs.favorites),
             attempts.when(
@@ -159,6 +166,29 @@ class HomeScreen extends ConsumerWidget {
               loading: () => const _Skeleton(height: 72),
               error: (_, _) => const Text('History is unavailable.'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddMoney extends StatelessWidget {
+  const _AddMoney();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SurfaceCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This wallet is empty', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            const Text('Add fake rupees first. Then you can send them to another PayFlow account.'),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: () => context.go('/topup'), child: const Text('Add money')),
           ],
         ),
       ),

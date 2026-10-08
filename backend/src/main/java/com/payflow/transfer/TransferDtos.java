@@ -18,4 +18,7 @@ public final class TransferDtos {
 
     public record TransferResponse(UUID transactionId, String status, long balanceAfterMinor) {
     }
+
+    public record RecipientView(String name, String email) {
+    }
 }

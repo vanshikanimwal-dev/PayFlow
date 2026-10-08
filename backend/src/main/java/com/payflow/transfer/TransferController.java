@@ -6,10 +6,12 @@ import com.payflow.common.RequestHasher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,6 +29,12 @@ public class TransferController {
         this.transfers = transfers;
         this.hasher = hasher;
         this.pins = pins;
+    }
+
+    @GetMapping("/recipient")
+    public TransferDtos.RecipientView recipient(@RequestParam("q") String query) {
+        currentUser.require();
+        return transfers.preview(query);
     }
 
     @PostMapping

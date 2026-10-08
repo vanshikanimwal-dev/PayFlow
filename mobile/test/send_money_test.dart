@@ -8,6 +8,7 @@ import 'package:payflow_mobile/core/errors/api_exception.dart';
 import 'package:payflow_mobile/core/local/local_cache.dart';
 import 'package:payflow_mobile/core/network/models.dart';
 import 'package:payflow_mobile/core/network/payflow_api.dart';
+import 'package:payflow_mobile/core/theme/ui_prefs.dart';
 import 'package:payflow_mobile/features/transfer/send_screen.dart';
 
 void main() {
@@ -21,7 +22,7 @@ void main() {
     await tester.tap(find.byKey(const Key('confirm')));
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('COMPLETED'), findsOneWidget);
+    expect(find.textContaining('is with Bob'), findsOneWidget);
     expect(api.transferCalls, 1);
   });
 
@@ -47,7 +48,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm')));
     await tester.pump();
-    expect(find.textContaining('Checking'), findsOneWidget);
+    expect(find.textContaining('Do not pay again'), findsOneWidget);
+  });
+
+  testWidgets('confirm names the person and warns about a recent payment', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        payflowApiProvider.overrideWithValue(_FakeApi()),
+        localCacheProvider.overrideWithValue(MemoryCache()),
+        uiPrefsProvider.overrideWith(_RecentPrefs.new),
+      ],
+      child: const MaterialApp(home: SendScreen()),
+    ));
+    await tester.enterText(find.byKey(const Key('recipient')), 'bob@payflow.local');
+    await tester.enterText(find.byKey(const Key('amount')), '20');
+    await tester.tap(find.byKey(const Key('review')));
+    await tester.pumpAndSettle();
+    expect(find.text('Bob'), findsOneWidget);
+    expect(find.textContaining('already sent'), findsOneWidget);
   });
 }
 
@@ -65,6 +83,11 @@ class _FakeApi implements PayflowApi {
   ApiException? error;
   bool timeout = false;
   int transferCalls = 0;
+
+  @override
+  Future<RecipientView> recipient(String emailOrPhone) async {
+    return RecipientView(name: 'Bob', email: 'bob@payflow.local');
+  }
 
   @override
   Future<TransferResult> transfer({
@@ -102,4 +125,13 @@ class _FakeApi implements PayflowApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RecentPrefs extends UiPrefs {
+  @override
+  UiState build() {
+    return UiState(recent: [
+      RecentPay(recipient: 'bob@payflow.local', amountMinor: 5000, at: DateTime.now().toUtc()),
+    ]);
+  }
 }

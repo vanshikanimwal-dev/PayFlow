@@ -42,7 +42,7 @@ class SendController extends Notifier<MoneyState> {
 
   void reset() => state = MoneyIdle();
 
-  Future<void> confirm({required String recipient, required int amountMinor, String? note}) async {
+  Future<void> confirm({required String recipient, required String name, required int amountMinor, String? note}) async {
     final key = const Uuid().v4();
     final body = jsonEncode({'to': recipient, 'amountMinor': amountMinor, 'note': note});
     await ref.read(localCacheProvider).saveAttempt(AttemptRecord(
@@ -61,21 +61,23 @@ class SendController extends Notifier<MoneyState> {
           );
       await ref.read(localCacheProvider).deleteAttempt(key);
       ref.read(uiPrefsProvider.notifier).remember(recipient);
+      ref.read(uiPrefsProvider.notifier).rememberPayment(recipient, amountMinor);
       HapticFeedback.mediumImpact().catchError((_) {});
-      state = MoneySuccess('Sent', '${Paise.format(amountMinor)} · ${result.status} · left ${Paise.format(result.balanceAfterMinor)}');
+      state = MoneySuccess('Sent', '${Paise.format(amountMinor)} is with $name. You have ${Paise.format(result.balanceAfterMinor)} left.');
     } on PayflowTimeout {
-      state = MoneyChecking('Checking whether the transfer completed…');
+      state = MoneyChecking('Still checking. Do not pay again.');
       await _poll(key);
     } on ApiException catch (error) {
       if (error.code != 'IDEMPOTENCY_IN_PROGRESS') {
         await ref.read(localCacheProvider).deleteAttempt(key);
       }
-      state = MoneyFailure(error.code, error.message);
+      final reason = error.message.isEmpty ? friendlyError(error.code) : error.message;
+      state = MoneyFailure(error.code, 'Not sent. Your balance did not change. $reason');
     }
   }
 
   Future<void> resume(String key) async {
-    state = MoneyChecking('Checking an earlier transfer…');
+    state = MoneyChecking('Still checking. Do not pay again.');
     await _poll(key);
   }
 
@@ -85,11 +87,12 @@ class SendController extends Notifier<MoneyState> {
       try {
         final detail = await ref.read(payflowApiProvider).byKey(key);
         await ref.read(localCacheProvider).deleteAttempt(key);
-        state = MoneySuccess(detail.status, detail.type);
+        state = MoneySuccess('Sent', '${Paise.format(detail.amountMinor)} went through. Do not pay again.');
         return;
       } on ApiException catch (error) {
         if (error.status != 404) {
-          state = MoneyFailure(error.code, error.message);
+          final reason = error.message.isEmpty ? friendlyError(error.code) : error.message;
+          state = MoneyFailure(error.code, 'Not sent. Your balance did not change. $reason');
           return;
         }
       } on PayflowTimeout {
@@ -97,6 +100,6 @@ class SendController extends Notifier<MoneyState> {
       }
       await Future<void>.delayed(const Duration(seconds: 2));
     }
-    state = MoneyChecking('Still processing. The same attempt will be checked again when you reopen the app.');
+    state = MoneyChecking('Still checking. Do not pay again.');
   }
 }

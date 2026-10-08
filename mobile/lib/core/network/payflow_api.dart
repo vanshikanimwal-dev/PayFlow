@@ -27,6 +27,8 @@ abstract class PayflowApi {
     String? note,
   });
 
+  Future<RecipientView> recipient(String emailOrPhone);
+
   Future<TopUpResult> startTopUp({
     required String idempotencyKey,
     required int amountMinor,

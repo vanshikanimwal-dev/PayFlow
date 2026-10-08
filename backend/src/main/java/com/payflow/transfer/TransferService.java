@@ -86,6 +86,15 @@ public class TransferService {
         this.fraud = fraud;
     }
 
+    @Transactional(readOnly = true)
+    public TransferDtos.RecipientView preview(String emailOrPhone) {
+        if (emailOrPhone == null || emailOrPhone.isBlank()) {
+            throw new PayflowException(ErrorCode.VALIDATION_ERROR, HttpStatus.BAD_REQUEST, "Enter an email or phone");
+        }
+        AppUser recipient = resolve(emailOrPhone.trim());
+        return new TransferDtos.RecipientView(RecipientNames.visible(recipient.getDisplayName(), recipient.getEmail()), recipient.getEmail());
+    }
+
     @Transactional
     public TransferDtos.TransferResponse transfer(UUID userId, String idempotencyKey, String requestHash, TransferDtos.TransferRequest request) {
         BeginResult<TransferDtos.TransferResponse> begin =

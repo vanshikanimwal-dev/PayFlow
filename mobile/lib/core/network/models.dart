@@ -172,6 +172,20 @@ class TxDetail {
   }
 }
 
+class RecipientView {
+  RecipientView({required this.name, required this.email});
+
+  final String name;
+  final String email;
+
+  factory RecipientView.fromJson(Map<String, dynamic> json) {
+    return RecipientView(
+      name: json['name'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+    );
+  }
+}
+
 class TransferResult {
   TransferResult({required this.transactionId, required this.status, required this.balanceAfterMinor});
 

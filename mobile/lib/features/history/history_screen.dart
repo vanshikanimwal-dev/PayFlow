@@ -111,6 +111,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               ],
             ),
           ),
+          if (_filtered)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: _clearFilters, child: const Text('Clear filters')),
+            ),
           Expanded(
             child: ListView.builder(
               controller: _scroll,
@@ -119,7 +124,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 if (index == _visible.length) {
                   return Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(_loading ? 'Loading…' : (_visible.isEmpty ? 'Nothing matches this filter.' : (_done ? 'End of history' : ''))),
+                    child: Text(
+                      _loading
+                          ? 'Loading…'
+                          : (_visible.isEmpty
+                              ? activityEmptyLine(loadedAny: _items.isNotEmpty, filtered: _filtered)
+                              : (_done ? 'End of history' : '')),
+                    ),
                   );
                 }
                 final item = _visible[index];
@@ -146,6 +157,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         ],
       ),
     );
+  }
+
+  bool get _filtered {
+    return _type != null || _status != null || _search.text.trim().isNotEmpty || _min.text.trim().isNotEmpty || _max.text.trim().isNotEmpty;
   }
 
   List<TxSummary> get _visible {
@@ -183,6 +198,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
+  }
+
+  void _clearFilters() {
+    _search.clear();
+    _min.clear();
+    _max.clear();
+    _type = null;
+    _status = null;
+    _reload();
   }
 
   void _reload() {
@@ -226,6 +250,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
+String activityEmptyLine({required bool loadedAny, required bool filtered}) {
+  if (!loadedAny && !filtered) {
+    return 'No payments yet. Add money from the wallet screen.';
+  }
+  return 'Nothing matches this filter.';
+}
+
 class _Filter extends StatelessWidget {
   const _Filter({required this.label, required this.value, required this.values, required this.onChanged});
 
@@ -237,6 +268,7 @@ class _Filter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
+      key: ValueKey('$label-${value ?? ''}'),
       initialValue: value ?? '',
       decoration: InputDecoration(labelText: label),
       items: [

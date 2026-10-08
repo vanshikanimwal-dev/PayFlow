@@ -136,6 +136,11 @@ class DioPayflowApi implements PayflowApi, ControlsApi {
   }
 
   @override
+  Future<RecipientView> recipient(String emailOrPhone) {
+    return _data(_dio.get('/transfers/recipient', queryParameters: {'q': emailOrPhone}), RecipientView.fromJson);
+  }
+
+  @override
   Future<TopUpResult> startTopUp({
     required String idempotencyKey,
     required int amountMinor,

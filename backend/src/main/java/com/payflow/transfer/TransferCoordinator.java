@@ -29,6 +29,10 @@ public class TransferCoordinator {
         this.rateLimiter = rateLimiter;
     }
 
+    public TransferDtos.RecipientView preview(String emailOrPhone) {
+        return transfers.preview(emailOrPhone);
+    }
+
     public TransferDtos.TransferResponse transfer(UUID userId, String key, String hash, TransferDtos.TransferRequest request) {
         rateLimiter.money(userId);
         if (properties.getLocking().optimistic()) {

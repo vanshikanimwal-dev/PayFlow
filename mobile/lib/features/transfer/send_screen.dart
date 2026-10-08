@@ -7,7 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_scope.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/money/paise.dart';
+import '../../core/network/models.dart';
 import '../../core/theme/payflow_widgets.dart';
+import '../../core/theme/ui_prefs.dart';
+import '../wallet/home_screen.dart';
 import 'send_controller.dart';
 
 class SendScreen extends ConsumerStatefulWidget {
@@ -24,6 +27,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   final _amount = TextEditingController();
   final _note = TextEditingController();
   String? _amountError;
+  String? _recipientError;
+  bool _lookingUp = false;
 
   @override
   void initState() {
@@ -46,15 +51,38 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(sendControllerProvider);
     final online = ref.watch(onlineProvider);
+    final favorites = ref.watch(uiPrefsProvider).favorites;
+    final balance = ref.watch(walletProvider).value?.balanceMinor;
     return Scaffold(
       appBar: AppBar(title: const Text('Send money')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (balance == 0) ...[
+            const SurfaceCard(child: Text('You have ₹0.00. Add fake rupees before you send.')),
+            const SizedBox(height: 8),
+            OutlinedButton(onPressed: () => context.go('/topup'), child: const Text('Add money')),
+            const SizedBox(height: 16),
+          ],
+          if (favorites.isNotEmpty) ...[
+            const Text('People you paid'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final email in favorites)
+                  ActionChip(
+                    label: Text(email.split('@').first),
+                    onPressed: () => setState(() => _recipient.text = email),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             key: const Key('recipient'),
             controller: _recipient,
-            decoration: const InputDecoration(labelText: 'Email or phone'),
+            decoration: InputDecoration(labelText: 'Email or phone', errorText: _recipientError),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -75,12 +103,22 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          const Text('What is this for?'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final label in const ['Rent', 'Food', 'Travel', 'Friends'])
+                ActionChip(label: Text(label), onPressed: () => setState(() => _note.text = label)),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note')),
           const SizedBox(height: 20),
           FilledButton(
             key: const Key('review'),
-            onPressed: !online || state is MoneySubmitting || state is MoneyChecking ? null : _review,
-            child: Text(state is MoneySubmitting ? 'Sending…' : 'Review transfer'),
+            onPressed: !online || _lookingUp || state is MoneySubmitting || state is MoneyChecking ? null : _review,
+            child: Text(_lookingUp || state is MoneySubmitting ? 'Checking…' : 'Review transfer'),
           ),
           const SizedBox(height: 16),
           _Result(state: state),
@@ -91,12 +129,47 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
   Future<void> _review() async {
     final minor = Paise.parse(_amount.text);
-    setState(() => _amountError = minor == null ? 'Enter a rupee amount such as 20.50' : null);
-    if (minor == null || _recipient.text.trim().isEmpty) {
+    final recipient = _recipient.text.trim();
+    setState(() {
+      _amountError = minor == null ? 'Enter a rupee amount such as 20.50' : null;
+      _recipientError = recipient.isEmpty ? 'Enter an email or phone' : null;
+    });
+    if (minor == null || recipient.isEmpty) {
       return;
     }
-    final recipient = _recipient.text.trim();
+    setState(() => _lookingUp = true);
+    late final RecipientView person;
+    try {
+      person = await ref.read(payflowApiProvider).recipient(recipient);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _lookingUp = false;
+          _recipientError = error.status == 404 ? 'No wallet uses that email or phone.' : friendlyError(error.code);
+        });
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _lookingUp = false;
+          _recipientError = 'Could not check that person. Try again.';
+        });
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _lookingUp = false);
     final note = _note.text.trim();
+    final session = ref.read(sessionProvider);
+    final own = session != null && session.email.toLowerCase() == person.email.toLowerCase();
+    final warning = recentPayWarning(
+      pays: ref.read(uiPrefsProvider).recent,
+      recipient: person.email,
+      now: DateTime.now().toUtc(),
+    );
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -107,22 +180,33 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Confirm', style: Theme.of(context).textTheme.titleLarge),
+              Text('Send ${Paise.format(minor)}?', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
-              Text(Paise.format(minor), style: Theme.of(context).textTheme.headlineMedium),
-              Text('To $recipient'),
+              Text(person.name, style: Theme.of(context).textTheme.headlineSmall),
+              Text(person.email),
               if (note.isNotEmpty) Text(note),
+              if (own) ...[
+                const SizedBox(height: 12),
+                const Text('That is your own wallet.'),
+              ],
+              if (warning != null) ...[
+                const SizedBox(height: 12),
+                Text(warning),
+              ],
               const SizedBox(height: 16),
               FilledButton(
                 key: const Key('confirm'),
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await ref.read(sendControllerProvider.notifier).confirm(
-                        recipient: recipient,
-                        amountMinor: minor,
-                        note: note,
-                      );
-                },
+                onPressed: own
+                    ? null
+                    : () async {
+                        Navigator.of(context).pop();
+                        await ref.read(sendControllerProvider.notifier).confirm(
+                              recipient: person.email,
+                              name: person.name,
+                              amountMinor: minor,
+                              note: note,
+                            );
+                      },
                 child: const Text('Send now'),
               ),
             ],
